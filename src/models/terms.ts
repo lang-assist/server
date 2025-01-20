@@ -1,0 +1,24 @@
+import { CreatedAtField, DbHelper } from "../helpers/db";
+import { TermSet } from "../utils/types";
+
+interface IModel extends CreatedAtField {
+  hash: string;
+  data: TermSet;
+  resolvedBy: string;
+}
+
+const Model = DbHelper.model<IModel>({
+  collectionName: "terms",
+  cacheById: false,
+  queryCacheFields: ["hash"],
+  indexes: [
+    {
+      key: {
+        hash: 1,
+      },
+      unique: true,
+    },
+  ],
+});
+
+export { Model, IModel };
