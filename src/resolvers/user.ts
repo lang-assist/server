@@ -288,6 +288,9 @@ export const userResolvers: AppResolvers = {
     },
   },
   Material: {
+    type: (parent) => {
+      return parent.details.type;
+    },
     answer: async (parent) => {
       return await UserAnswer.findOne({
         material_ID: parent._id,
