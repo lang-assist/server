@@ -15,7 +15,6 @@ const Model = DbHelper.model<IModel>({
   indexes: [
     {
       key: { material_ID: 1, user_ID: 1, path_ID: 1 },
-      unique: true,
     },
   ],
 });

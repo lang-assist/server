@@ -24,7 +24,6 @@ export class AzureVoice {
   //       }
   //     );
   //     const data = await response.json();
-  //     console.log("AZURE VOICES", data);
 
   //     if (!fs.existsSync(process.env.TEMP_DIR!)) {
   //       fs.mkdirSync(process.env.TEMP_DIR!, { recursive: true });

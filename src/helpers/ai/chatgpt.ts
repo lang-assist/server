@@ -4,7 +4,6 @@ import {
   AIConversationTurn,
   AIConversationTurnResponse,
   aiConversationTurnResponseSchema,
-  aiConversationTurnSchema,
   AIError,
   AIGenerationResponse,
   AIInvalidSchemaError,
@@ -15,28 +14,36 @@ import { AIEmbeddingGenerator, AIModel, EmbeddingDim, schemas } from "./base";
 import { berberEnv } from "../../init";
 import {
   Chatgpt_event,
-  IConversationTurn,
   IJourney,
   IMaterial,
+  IMeta,
   IUserPath,
   Material,
   Meta,
+  Prompts,
   Usage,
-  Voices,
 } from "../../models/_index";
 import OpenAI from "openai";
 import { JourneyHelper } from "../journey";
 import { Thread } from "openai/resources/beta/threads/threads";
 import fs from "fs";
-import { getConversationMainInstruction, getMainInstruction } from "../prompts";
-import { AIMessages, VectorStores } from "../../utils/types/common";
-import {
-  AssistantStream,
-  AssistantStreamEvents,
-} from "openai/lib/AssistantStream";
-import { PromptBuilder } from "../../utils/prompt-builder";
+import { VectorStores } from "../../utils/types/common";
+import { AssistantStream } from "openai/lib/AssistantStream";
+import { PromptBuilder } from "ai-prompter";
 import { AssistantStreamEvent } from "openai/resources/beta/assistants";
 import { ValidationError } from "jsonschema";
+import { instructions } from "../prompts";
+import crypto from "crypto";
+import { PromptFilters, SupportedLocale } from "../../utils/types";
+
+interface InitialTemplateMeta {
+  assistants: {
+    [key in SupportedLocale]: {
+      assistantId: string;
+      hash: string;
+    };
+  };
+}
 
 export class OpenAIModel extends AIModel {
   constructor(public modelName: string) {
@@ -53,63 +60,155 @@ export class OpenAIModel extends AIModel {
     voices: "vs_Tw1chqXDa9shGDhC8H4AlFE9",
   };
 
+  apiKey: string = berberEnv.OPENAI_API_KEY;
+
+  _client?: OpenAI;
+
+  get client() {
+    if (!this._client) {
+      this._client = new OpenAI();
+    }
+    return this._client;
+  }
+
+  static mainInstructionHash: string | null = null;
+
+  async _init(): Promise<void> {
+    await this._createConversationAssistant();
+    const hash = crypto
+      .createHash("sha256")
+      .update(
+        instructions.main
+          .copyWith({
+            language: "us_US",
+            userName: "John Doe",
+          })
+          .build()
+      )
+      .digest("hex");
+
+    OpenAIModel.mainInstructionHash = hash;
+
+    return Promise.resolve();
+  }
+
+  static conversationAssistantId: string | null = null;
+
   async prepareThread(args: {
-    userPath: WithId<IUserPath>;
-    journey: WithId<IJourney>;
+    builder: PromptBuilder;
+    aiModel: string;
+    language: SupportedLocale;
+    userPath?: WithId<IUserPath>;
+    journey?: WithId<IJourney>;
     schema: {
       name: string;
       schema: any;
     };
-    instructions: string;
   }): Promise<{
-    thread: Thread;
-    journey: WithId<IJourney>;
-    userPath: WithId<IUserPath>;
+    threadId: string;
+    assistantId: string;
+    journey?: WithId<IJourney>;
+    userPath?: WithId<IUserPath>;
   }> {
-    if (!args.journey.assistantId) {
-      const assistant = await this.client.beta.assistants.create({
-        model: this.name,
-        instructions: args.instructions,
-        name: args.journey._id.toString(),
-        response_format: {
-          type: "json_schema",
-          json_schema: args.schema,
-        },
-        metadata: {
-          journeyId: args.journey._id.toString(),
-        },
-      });
+    let assistantId: string | null = null;
+    let threadId: string | null = null;
 
-      const newJourney = await JourneyHelper.updateJourney(args.journey._id, {
-        assistantId: assistant.id,
-      });
+    if (!args.journey) {
+      assistantId = await this._getInitialTemplateAssistant(args.language);
 
-      if (!newJourney) {
-        throw new Error("Failed to update journey");
-      }
-
-      args.journey = newJourney;
-    }
-
-    if (!args.userPath.threadId) {
-      const thread = await this.client.beta.threads.create({});
-
-      const newUserPath = await JourneyHelper.updateUserPath(
-        args.userPath._id,
-        {
-          threadId: thread.id,
-        }
+      const { messages, context } = args.builder.buildForAssistant(
+        PromptFilters.withoutMain
       );
 
-      if (!newUserPath) {
-        throw new Error("Failed to update user path");
+      if (context) {
+        messages.push({
+          role: "assistant",
+          content: context,
+        });
       }
 
-      args.userPath = newUserPath;
+      const thread = await this.client.beta.threads.create({
+        messages,
+      });
+
+      threadId = thread.id;
+    } else {
+      const journey = args.journey!;
+      const userPath = args.userPath!;
+
+      if (
+        !journey.assistantId ||
+        OpenAIModel.mainInstructionHash !== journey.assistantHash
+      ) {
+        const { context } = args.builder.buildForAssistant(
+          PromptFilters.mainOnly
+        );
+
+        Prompts.insertOne({
+          messages: [],
+          context,
+          user_ID: userPath.user_ID,
+          journey_ID: journey._id,
+          path_ID: userPath._id,
+          purpose: "prepare-thread-for-journey",
+        });
+
+        const assistant = await this.client.beta.assistants.create({
+          model: this.name,
+          instructions: context,
+          name: journey._id.toString(),
+          response_format: {
+            type: "json_schema",
+            json_schema: args.schema,
+          },
+          metadata: {
+            journeyId: journey._id.toString(),
+          },
+        });
+
+        assistantId = assistant.id;
+
+        const newJourney = await JourneyHelper.updateJourney(journey._id, {
+          assistantId: assistant.id,
+          assistantHash: OpenAIModel.mainInstructionHash!,
+        });
+
+        if (!newJourney) {
+          throw new Error("Failed to update journey");
+        }
+
+        args.journey = newJourney;
+      } else {
+        assistantId = journey.assistantId;
+      }
+
+      if (!userPath.threadId) {
+        const thread = await this.client.beta.threads.create({});
+
+        const newUserPath = await JourneyHelper.updateUserPath(userPath._id, {
+          threadId: thread.id,
+        });
+
+        if (!newUserPath) {
+          throw new Error("Failed to update user path");
+        }
+
+        args.userPath = newUserPath;
+
+        threadId = thread.id;
+      } else {
+        threadId = userPath.threadId;
+      }
+    }
+
+    if (!threadId || !assistantId) {
+      console.error(threadId, assistantId, args);
+      throw new Error("Thread or assistant not found");
     }
 
     return {
-      thread: await this.client.beta.threads.retrieve(args.userPath.threadId!),
+      threadId,
+      assistantId,
       journey: args.journey,
       userPath: args.userPath,
     };
@@ -118,32 +217,35 @@ export class OpenAIModel extends AIModel {
   async _generateMaterial(
     builder: PromptBuilder,
     args: {
-      userPath: WithId<IUserPath>;
-      journey: WithId<IJourney>;
+      aiModel: string;
+      language: SupportedLocale;
+      userPath?: WithId<IUserPath>;
+      journey?: WithId<IJourney>;
     }
   ): Promise<AIGenerationResponse> {
-    const { thread, journey, userPath } = await this.prepareThread({
-      schema: {
-        name: "AIGenerationResponse",
-        schema: aiReviewResponseSchema([]),
-      },
-      instructions: getMainInstruction(args.journey.to),
-      journey: args.journey,
-      userPath: args.userPath,
-    });
+    const { threadId, assistantId, journey, userPath } =
+      await this.prepareThread({
+        builder: builder,
+        aiModel: args.aiModel,
+        language: args.language,
+        schema: {
+          name: "AIGenerationResponse",
+          schema: aiReviewResponseSchema([]),
+        },
+        journey: args.journey,
+        userPath: args.userPath,
+      });
 
     args.journey = journey;
     args.userPath = userPath;
 
-    const { messages, additionalContext } = builder.buildForAssistant();
-
     try {
       const resText = await this.runThread({
-        thread,
+        threadId,
+        assistantId,
         userPath: userPath,
         journey: journey,
-        additionalContext: additionalContext,
-        additionalMessages: messages,
+        builder: builder,
       });
 
       return resText;
@@ -153,32 +255,36 @@ export class OpenAIModel extends AIModel {
   }
 
   async runThread(args: {
-    thread: Thread;
-    userPath: WithId<IUserPath>;
-    journey: WithId<IJourney>;
-    additionalContext?: string;
-    additionalMessages: {
-      role: "user" | "assistant";
-      content: string;
-    }[];
+    threadId: string;
+    assistantId: string;
+    userPath?: WithId<IUserPath>;
+    journey?: WithId<IJourney>;
+    builder: PromptBuilder;
   }): Promise<any> {
-    console.log(
-      "RUN STARTED GPT",
-      args.additionalMessages,
-      args.additionalContext
-    );
-
     try {
       let runId: string | null = null;
       let stepId: string | null = null;
       let msgId: string | null = null;
 
+      const { messages, context } = args.builder.buildForAssistant(
+        PromptFilters.withoutMain
+      );
+
       const resText = await new Promise<any>(async (resolve, reject) => {
         try {
-          const run = this.client.beta.threads.runs.stream(args.thread.id, {
-            assistant_id: args.journey.assistantId!,
-            additional_instructions: args.additionalContext,
-            additional_messages: args.additionalMessages,
+          Prompts.insertOne({
+            messages,
+            context,
+            user_ID: args.userPath?.user_ID,
+            journey_ID: args.journey?._id,
+            path_ID: args.userPath?._id,
+            purpose: "run-thread-for-material",
+          });
+
+          const run = this.client.beta.threads.runs.stream(args.threadId, {
+            assistant_id: args.assistantId,
+            additional_instructions: context,
+            additional_messages: messages,
           });
 
           for await (const event of run) {
@@ -194,9 +300,9 @@ export class OpenAIModel extends AIModel {
                 break;
               case "thread.run.step.completed":
                 Usage.insertOne({
-                  user_ID: args.userPath.user_ID,
-                  journey_ID: args.journey._id,
-                  path_ID: args.userPath._id,
+                  user_ID: args.userPath?.user_ID,
+                  journey_ID: args.journey?._id,
+                  path_ID: args.userPath?._id,
                   runId,
                   stepId,
                   msgId,
@@ -231,6 +337,7 @@ export class OpenAIModel extends AIModel {
             });
           }
         } catch (e) {
+          console.error(e);
           reject(e);
         }
       });
@@ -240,25 +347,6 @@ export class OpenAIModel extends AIModel {
       throw e;
     }
   }
-
-  apiKey: string = berberEnv.OPENAI_API_KEY;
-
-  _client?: OpenAI;
-
-  get client() {
-    if (!this._client) {
-      this._client = new OpenAI();
-    }
-    return this._client;
-  }
-
-  async _init(): Promise<void> {
-    await this.client.beta.assistants.list();
-    await this._createConversationAssistant();
-    return Promise.resolve();
-  }
-
-  static conversationAssistantId: string | null = null;
 
   async _generateConversationTurn(
     builder: PromptBuilder,
@@ -275,12 +363,24 @@ export class OpenAIModel extends AIModel {
     }
 
     try {
-      const { messages, additionalContext } = builder.buildForAssistant();
+      const { messages, context } = builder.buildForAssistant(
+        PromptFilters.turnsOnly
+      );
+
+      Prompts.insertOne({
+        messages,
+        context,
+        user_ID: material.user_ID,
+        journey_ID: material.journey_ID,
+        path_ID: material.path_ID,
+        material_ID: material._id,
+        purpose: "generate-conversation-turn",
+      });
 
       const run = this.client.beta.threads.runs.stream(thread.id, {
         assistant_id: OpenAIModel.conversationAssistantId!,
         additional_messages: messages,
-        additional_instructions: additionalContext,
+        additional_instructions: context,
       });
 
       const res = await this.runConversationThread({
@@ -290,8 +390,6 @@ export class OpenAIModel extends AIModel {
         thread,
         run,
       });
-
-      console.log("RUN COMPLETED", res);
 
       return {
         turn: res.turn,
@@ -314,17 +412,33 @@ export class OpenAIModel extends AIModel {
         throw new Error("Thread not found");
       }
     } else {
-      const { messages, additionalContext } = builder.buildForAssistant();
+      const { messages, context } = builder.buildForAssistant(
+        PromptFilters.withoutMain
+      );
 
-      if (additionalContext) {
-        messages.push({
-          role: "assistant",
-          content: additionalContext,
-        });
+      let msgs = messages;
+
+      if (context) {
+        msgs = [
+          {
+            role: "assistant",
+            content: context,
+          },
+          ...msgs,
+        ];
       }
 
+      Prompts.insertOne({
+        messages: msgs,
+        user_ID: material.user_ID,
+        journey_ID: material.journey_ID,
+        path_ID: material.path_ID,
+        material_ID: material._id,
+        purpose: "prepare-conversation",
+      });
+
       thread = await this.client.beta.threads.create({
-        messages,
+        messages: msgs,
       });
 
       const newMaterial = await Material.findByIdAndUpdate(material._id, {
@@ -412,7 +526,7 @@ export class OpenAIModel extends AIModel {
       if (lastError.code === "rate_limit_exceeded") {
         const message = lastError.message;
         const parsed = this.parseRateLimitError(message);
-        console.log(parsed);
+
         if (parsed.requested > parsed.limit) {
           return new AIError("This message is too long", event.data.id);
         }
@@ -518,6 +632,82 @@ export class OpenAIModel extends AIModel {
     OpenAIModel.conversationAssistantId = null;
   }
 
+  static _initialTemplateAssistants: {
+    // language: assistantId
+    [key: string]: {
+      assistantId: string;
+      hash: string;
+    };
+  } = {};
+
+  async _getInitialTemplateAssistant(language: SupportedLocale) {
+    if (OpenAIModel._initialTemplateAssistants[language]) {
+      return OpenAIModel._initialTemplateAssistants[language].assistantId;
+    }
+
+    const meta: WithId<IMeta & InitialTemplateMeta> | null =
+      (await Meta.findOne({
+        name: `initial-template-assistant-${this.name}`,
+      })) as WithId<IMeta & InitialTemplateMeta> | null;
+
+    const instruction = instructions.main
+      .copyWith({
+        language,
+        userName: "unknown",
+      })
+      .build();
+
+    const hash = crypto.createHash("sha256").update(instruction).digest("hex");
+
+    if (meta && meta.assistants[language].hash === hash) {
+      return meta.assistants[language].assistantId;
+    }
+
+    Prompts.insertOne({
+      messages: [],
+      context: instruction,
+      purpose: `create-initial-template-thread-${language}`,
+    });
+
+    const assistant = await this.client.beta.assistants.create({
+      model: this.name,
+      instructions: instruction,
+      name: `initial-template-assistant-${this.name}-${language}`,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          description: "The response of the initial template assistant",
+          name: "AIGeneratedMaterialResponse",
+          schema: aiReviewResponseSchema(["newMaterials"]),
+        },
+      },
+    });
+
+    OpenAIModel._initialTemplateAssistants[language] = {
+      assistantId: assistant.id,
+      hash,
+    };
+
+    await Meta.updateOne(
+      {
+        name: `initial-template-assistant-${this.name}`,
+      },
+      {
+        $set: {
+          [`assistants.${language}`]: {
+            assistantId: assistant.id,
+            hash,
+          },
+        },
+      },
+      {
+        upsert: true,
+      }
+    );
+
+    return assistant.id;
+  }
+
   async _createConversationAssistant() {
     if (OpenAIModel.conversationAssistantId) {
       return;
@@ -527,14 +717,29 @@ export class OpenAIModel extends AIModel {
       name: `conversation-assistant-${this.name}`,
     });
 
-    if (meta) {
+    const instruction = instructions.conversation
+      .copyWith({
+        language: "us_US",
+        userName: "John Doe",
+      })
+      .build();
+
+    const hash = crypto.createHash("sha256").update(instruction).digest("hex");
+
+    if (meta && meta.hash === hash) {
       OpenAIModel.conversationAssistantId = meta.assistantId as string;
       return;
     }
 
+    Prompts.insertOne({
+      messages: [],
+      context: instruction,
+      purpose: "create-conversation-assistant",
+    });
+
     const assistant = await this.client.beta.assistants.create({
       model: this.name,
-      instructions: getConversationMainInstruction(),
+      instructions: instruction,
       name: `conversation-assistant-${this.name}`,
       response_format: {
         type: "json_schema",
@@ -546,8 +751,6 @@ export class OpenAIModel extends AIModel {
       },
     });
 
-    console.log(assistant);
-
     OpenAIModel.conversationAssistantId = assistant.id;
 
     await Meta.updateOne(
@@ -557,6 +760,7 @@ export class OpenAIModel extends AIModel {
       {
         $set: {
           assistantId: assistant.id,
+          hash,
         },
       },
       {
@@ -588,10 +792,6 @@ export class OpenAIModel extends AIModel {
           uploaded.add(fileId.id);
         })
       );
-
-      console.log(
-        `Uploaded ${uploaded.size} files, ${filesToUpload.size} left`
-      );
     }
 
     var counter = 0;
@@ -603,7 +803,7 @@ export class OpenAIModel extends AIModel {
 
       counter++;
       if (counter % 10 === 0) {
-        console.log(`Uploaded ${counter} of ${uploaded.size} files`);
+        console.warn(`Uploaded ${counter} of ${uploaded.size} files`);
       }
     }
   }
@@ -624,8 +824,6 @@ export class OpenAIModel extends AIModel {
     await this.client.beta.vectorStores.files.create(vectorStore.id, {
       file_id: file.id,
     });
-
-    console.log(`Stored item picture ${picture.id}`);
   }
 }
 

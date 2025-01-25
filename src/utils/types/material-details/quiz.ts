@@ -8,31 +8,47 @@ export interface QuizDetails extends MaterialDetails {
 export const quizPreludeSchema = {
   type: "object",
   properties: {
-    type: {
-      type: "string",
-      enum: ["STORY"],
-    },
     id: { type: "string" },
     parts: {
       type: "array",
       items: {
-        type: "object",
-        properties: {
-          type: { type: "string", enum: ["STORY", "PICTURE"] },
-          content: { type: "string" },
-          picturePrompt: { type: "string" },
-          pictureId: { type: "string" },
-        },
-        required: ["type"],
-        additionalProperties: false,
+        oneOf: [
+          {
+            type: "object",
+            properties: {
+              type: { type: "string", const: "STORY" },
+              content: { type: "string" },
+            },
+            required: ["type", "content"],
+            additionalProperties: false,
+          },
+          {
+            type: "object",
+            properties: {
+              type: { type: "string", const: "PICTURE" },
+              picturePrompt: { type: "string" },
+            },
+            required: ["type", "picturePrompt"],
+            additionalProperties: false,
+          },
+          {
+            type: "object",
+            properties: {
+              type: { type: "string", const: "AUDIO" },
+              content: { type: "string" },
+            },
+            required: ["type", "content"],
+            additionalProperties: false,
+          },
+        ],
       },
     },
   },
-  required: ["id", "type", "parts"],
+  required: ["id", "parts"],
   additionalProperties: false,
 };
 
-export type QuizPreludeItemType = "STORY" | "PICTURE";
+export type QuizPreludeItemType = "STORY" | "PICTURE" | "AUDIO";
 
 export interface QuizPrelude {
   id: string;
@@ -41,6 +57,7 @@ export interface QuizPrelude {
     content?: string;
     picturePrompt?: string;
     pictureId?: string;
+    audioId?: string;
   }[];
 }
 
@@ -53,7 +70,7 @@ export type QuizQuestionType =
   | "MATCHING"
   | "ORDERING"
   | "TEXT_INPUT_WRITE"
-  | "TEXT_INPUT_CHOICE";
+  | "RECORD";
 
 export interface QuizQuestion {
   id: string;
@@ -77,9 +94,8 @@ export const questionItemSchema = {
   properties: {
     id: {
       type: "string",
-      description: "for identify answer. can be a1, a2 etc. DONT duplicate id.",
     },
-    text: { type: "string", description: "the user facing text of the item" },
+    text: { type: "string" },
     picturePrompt: {
       type: "string",
     },
@@ -103,8 +119,7 @@ export function quizQuestionSchema(type: QuizQuestionType) {
   if (
     type === "MULTIPLE_CHOICE" ||
     type === "CHOICE" ||
-    type === "FILL_CHOICE" ||
-    type === "TEXT_INPUT_CHOICE"
+    type === "FILL_CHOICE"
   ) {
     otherProperties.choices = { type: "array", items: questionItemRef };
     requiredProperties.push("choices");
@@ -126,8 +141,6 @@ export function quizQuestionSchema(type: QuizQuestionType) {
     properties: {
       id: {
         type: "string",
-        description:
-          "The id of the question. MUST be unique in the material. DONT duplicate id. It will be used to identify the question in the answer. Can be 'q1', 'text1', 'q2', 'text2' etc.",
       },
       type: {
         type: "string",
@@ -135,12 +148,9 @@ export function quizQuestionSchema(type: QuizQuestionType) {
       },
       question: {
         type: "string",
-        description: "The question user facing text",
       },
       preludeID: {
         type: "string",
-        description:
-          "ID of the connected prelude. If the question requires a preliminary information, the prelude id should be included here. Prelude id MUST be in the preludes array. ",
       },
       ...otherProperties,
     },
@@ -164,7 +174,6 @@ export const quizDetailsSchema = {
           quizQuestionSchema("MATCHING"),
           quizQuestionSchema("ORDERING"),
           quizQuestionSchema("TEXT_INPUT_WRITE"),
-          quizQuestionSchema("TEXT_INPUT_CHOICE"),
         ],
       },
     },

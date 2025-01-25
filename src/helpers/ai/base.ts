@@ -3,8 +3,6 @@ import {
   AIConversationTurn,
   AIConversationTurnResponse,
   aiConversationTurnResponseSchema,
-  aiConversationTurnSchema,
-  AIError,
   AIGeneratedMaterialResponse,
   AIGenerationResponse,
   AIInvalidSchemaError,
@@ -14,9 +12,11 @@ import {
 } from "../../utils/ai-types";
 import {
   AiErrors,
+  AiFeedback,
   IConversationTurn,
   IJourney,
   IMaterial,
+  IUser,
   IUserAnswer,
   IUserPath,
   IVoices,
@@ -28,11 +28,12 @@ import {
   PathLevel,
   MaterialType,
   ConversationDetails,
+  PromptTags,
+  SupportedLocale,
 } from "../../utils/types";
-import { journeyInstructions } from "../instructions";
 import { DbHelper } from "../db";
 import { RedisClientType, SchemaFieldTypes, VectorAlgorithms } from "redis";
-import { PromptBuilder } from "../../utils/prompt-builder";
+import { MessageBuilder, msg, PromptBuilder } from "ai-prompter";
 import { Validator } from "jsonschema";
 import { randomString } from "../../utils/random";
 
@@ -204,9 +205,7 @@ class AIModelQueue {
       return;
     }
     this._running = true;
-    console.log("RUN STARTED", this._tryAgainAt);
     while (!this._isEmpty() && !this._isFull()) {
-      console.log("RUN LOOP", this._tryAgainAt);
       if (this._tryAgainAt > 0) {
         if (Date.now() < this._tryAgainAt) {
           this._tryAgainAt = -1;
@@ -232,7 +231,6 @@ class AIModelQueue {
             item.resolve(res);
             this._remove(item);
           } else {
-            console.log(JSON.stringify(result.errors, null, 2));
             this._handleError(
               item,
               new AIInvalidSchemaError(
@@ -293,9 +291,11 @@ export abstract class AIModel {
   static async generateMaterial(
     builder: PromptBuilder,
     args: {
-      userPath: WithId<IUserPath>;
-      journey: WithId<IJourney>;
-      answers?: WithId<IUserAnswer>[];
+      aiModel: string;
+      language: SupportedLocale;
+      userPath?: WithId<IUserPath>;
+      journey?: WithId<IJourney>;
+      answer?: WithId<IUserAnswer> | null;
       requiredMaterials: {
         type: MaterialType;
         optional?: boolean;
@@ -303,12 +303,6 @@ export abstract class AIModel {
       }[];
     }
   ): Promise<AIGeneratedMaterialResponse[]> {
-    await journeyInstructions(builder, {
-      journey: args.journey,
-      userPath: args.userPath,
-      answers: args.answers,
-    });
-
     if (args.requiredMaterials.length > 0) {
       const req: string[] = [];
 
@@ -321,11 +315,15 @@ export abstract class AIModel {
         req.push(`${material.type}: ${material.description}`);
       }
 
-      builder.systemMessage(req.join("\n"));
+      builder.assistantMessage(req.join("\n"), {
+        extra: {
+          tags: [PromptTags.MATERIAL],
+        },
+      });
     }
 
-    const queue = this.queue[args.journey.aiModel];
-    const model = this.models[args.journey.aiModel];
+    const queue = this.queue[args.aiModel];
+    const model = this.models[args.aiModel];
 
     const res = await queue.add(
       builder,
@@ -333,6 +331,7 @@ export abstract class AIModel {
         return model._generateMaterial(bldr, {
           userPath: args.userPath,
           journey: args.journey,
+          language: args.language,
         });
       },
       "generateMaterial"
@@ -345,43 +344,60 @@ export abstract class AIModel {
       [key: string]: any;
     } = {};
 
-    if (res.newLevel) {
-      Object.keys(res.newLevel).forEach((key) => {
-        pathUpdates[`progress.level.${key}` as string] = res.newLevel![
-          key as keyof PathLevel
-        ] as any;
-      });
-    }
+    if (args.journey && args.userPath) {
+      if (res.newLevel) {
+        Object.keys(res.newLevel).forEach((key) => {
+          pathUpdates[`progress.level.${key}` as string] = res.newLevel![
+            key as keyof PathLevel
+          ] as any;
+        });
+      }
 
-    if (res.observations) {
-      const observations = this.updateArray(
-        args.userPath.progress.observations,
-        res.observations
-      );
+      if (res.observations) {
+        const observations = this.updateArray(
+          args.userPath.progress.observations,
+          res.observations
+        );
 
-      pathUpdates["progress.observations"] = observations;
-    }
+        pathUpdates["progress.observations"] = observations;
+      }
 
-    if (res.strongPoints) {
-      const strongPoints = this.updateArray(
-        args.userPath.progress.strongPoints,
-        res.strongPoints
-      );
+      if (res.strongPoints) {
+        const strongPoints = this.updateArray(
+          args.userPath.progress.strongPoints,
+          res.strongPoints
+        );
 
-      pathUpdates["progress.strongPoints"] = strongPoints;
-    }
+        pathUpdates["progress.strongPoints"] = strongPoints;
+      }
 
-    if (res.weakPoints) {
-      const weakPoints = this.updateArray(
-        args.userPath.progress.weakPoints,
-        res.weakPoints
-      );
+      if (res.weakPoints) {
+        const weakPoints = this.updateArray(
+          args.userPath.progress.weakPoints,
+          res.weakPoints
+        );
 
-      pathUpdates["progress.weakPoints"] = weakPoints;
-    }
+        pathUpdates["progress.weakPoints"] = weakPoints;
+      }
 
-    if (Object.keys(pathUpdates).length > 0) {
-      await JourneyHelper.updateUserPath(args.userPath._id, pathUpdates as any);
+      if (Object.keys(pathUpdates).length > 0) {
+        await JourneyHelper.updateUserPath(
+          args.userPath._id,
+          pathUpdates as any
+        );
+      }
+
+      if (res.feedbacks && res.feedbacks.length > 0) {
+        AiFeedback.insertMany(
+          res.feedbacks.map((f) => ({
+            material_ID: args.answer?.material_ID,
+            user_ID: args.journey!.user_ID,
+            feedback: f,
+          }))
+        ).catch((e) => {
+          console.error(e);
+        });
+      }
     }
 
     return res.newMaterials ?? [];
@@ -390,20 +406,28 @@ export abstract class AIModel {
   static considerAsNull = ["null", "undefined", "NULL", null, undefined];
 
   static async generateConversationTurn(
+    builder: PromptBuilder,
     material: WithId<IMaterial>,
     journey: WithId<IJourney>,
     nextTurn: string | null,
     userTurn?: WithId<IConversationTurn>
   ): Promise<AIConversationTurnResponse> {
-    const builder = new PromptBuilder();
-
     if (userTurn) {
-      builder.userMessage(userTurn.text);
+      builder.userMessage(userTurn.text, {
+        extra: {
+          tags: [PromptTags.TURNS],
+        },
+      });
     }
 
     if (nextTurn) {
-      builder.userMessage(
-        `Generate the next turn of the conversation: ${nextTurn}`
+      builder.assistantMessage(
+        `Generate the next turn of the conversation: ${nextTurn}`,
+        {
+          extra: {
+            tags: [PromptTags.TURNS],
+          },
+        }
       );
     }
 
@@ -448,8 +472,9 @@ export abstract class AIModel {
   abstract _generateMaterial(
     builder: PromptBuilder,
     args: {
-      userPath: WithId<IUserPath>;
-      journey: WithId<IJourney>;
+      language: SupportedLocale;
+      userPath?: WithId<IUserPath>;
+      journey?: WithId<IJourney>;
     }
   ): Promise<AIGenerationResponse>;
 
@@ -556,7 +581,7 @@ export abstract class AIEmbeddingGenerator {
       withTailoredScenarios?: boolean;
       overrideSingleLocale?: string;
     }
-  ) {
+  ): MessageBuilder {
     const {
       withShortName = false,
       withSecondaryLocales = false,
@@ -566,17 +591,16 @@ export abstract class AIEmbeddingGenerator {
       overrideSingleLocale,
     } = options ?? {};
 
-    const parts: string[] = [];
+    const message = msg();
 
     if (withShortName) {
-      parts.push(`ssml name: ${voice.shortName}`);
-      parts.push("\n");
+      message.addKv("name", voice.shortName);
     }
 
     if (voice.gender === "Neutral") {
-      parts.push("A unisex voice");
+      message.addKv("gender", "unisex");
     } else {
-      parts.push(`A ${voice.gender} voice`);
+      message.addKv("gender", voice.gender);
     }
 
     const locales = [];
@@ -593,20 +617,18 @@ export abstract class AIEmbeddingGenerator {
       );
     }
 
-    parts.push(`Speak ${locales.join(", ")}.`);
+    message.addKv("locales", locales.join(", "));
 
     if (
       withPersonalities &&
       voice.personalities &&
       voice.personalities.length > 0
     ) {
-      parts.push("\n");
-      parts.push(`Personalities: ${voice.personalities.join(", ")}`);
+      message.addKv("personalities", voice.personalities.join(", "));
     }
 
     if (withStyles && voice.styles && voice.styles.length > 0) {
-      parts.push("\n");
-      parts.push(`Styles: ${voice.styles.join(", ")}`);
+      message.addKv("styles", voice.styles.join(", "));
     }
 
     if (
@@ -614,11 +636,10 @@ export abstract class AIEmbeddingGenerator {
       voice.tailoredScenarios &&
       voice.tailoredScenarios.length > 0
     ) {
-      parts.push("\n");
-      parts.push(`Scenarios: ${voice.tailoredScenarios.join(", ")}`);
+      message.addKv("scenarios", voice.tailoredScenarios.join(", "));
     }
 
-    return parts.join("");
+    return message;
   }
 
   static async generateEmbeddingsForVoices() {
@@ -649,7 +670,7 @@ export abstract class AIEmbeddingGenerator {
           });
 
           const embedding = await AIEmbeddingGenerator.embedText({
-            text: instructions,
+            text: instructions.build(),
             model: this.defaultModel,
             dim: AIEmbeddingGenerator.defaultDim,
           });
@@ -663,7 +684,6 @@ export abstract class AIEmbeddingGenerator {
       i++;
       if (i % 30 === 0) {
         await Promise.all(promises);
-        console.log(`Processed ${i} voices`);
         promises = [];
       }
     }
@@ -676,13 +696,13 @@ export abstract class AIEmbeddingGenerator {
     try {
       await redisClient.ft.dropIndex("idx:voices");
     } catch (e) {
-      console.log(e);
+      console.error(e);
     }
     try {
       const keys = await redisClient.keys("voices:*");
       await redisClient.del(keys);
     } catch (e) {
-      console.log(e);
+      console.error(e);
     }
   }
 
@@ -694,11 +714,10 @@ export abstract class AIEmbeddingGenerator {
     let hasIndex = false;
 
     try {
-      const index = await redisClient.ft.info("idx:voices");
-      console.log(index);
+      await redisClient.ft.info("idx:voices");
       hasIndex = true;
     } catch (e) {
-      console.log(e);
+      console.error(e);
     }
 
     if (!hasIndex) {
@@ -743,7 +762,7 @@ export abstract class AIEmbeddingGenerator {
 
       for (const voice of voices) {
         const buffer = Buffer.from(Float32Array.from(voice.embedding!).buffer);
-        console.log(buffer.length);
+
         await redisClient.hSet(`voice_vectors:${voice._id}`, {
           gender: voice.gender,
           vector: buffer,
@@ -775,8 +794,6 @@ export abstract class AIEmbeddingGenerator {
       //   q = `(@gender:{${args.gender}})`;
       // }
 
-      console.log(q);
-
       const results = await redisClient.ft.search(
         "idx:voices",
         `${q}=>[KNN 10 @vector $BLOB as dist]`,
@@ -791,8 +808,6 @@ export abstract class AIEmbeddingGenerator {
           DIALECT: 4,
         }
       );
-
-      console.log(results);
 
       return await Promise.all(
         results.documents.map(async (doc) => {
@@ -822,10 +837,14 @@ export abstract class AIEmbeddingGenerator {
       characters
         .filter((c) => c.name !== "$user")
         .map(async (character) => {
-          const query = `Character: ${character.description}\nSpeak ${character.locale}.\nScenario: ${conversationDetails.scenarioScaffold}`;
-          console.log(query);
+          const q = msg();
+
+          q.addKv("Character", character.description);
+          q.addKv("Locale", character.locale);
+          q.addKv("Scenario", conversationDetails.scenarioScaffold);
+
           const voice = await AIEmbeddingGenerator.searchVoice({
-            query,
+            query: q.build(),
             gender: character.gender,
           });
 

@@ -1,17 +1,15 @@
-import { WithId } from "mongodb";
 import { MaterialHelper } from "../helpers/material";
 import { JourneyHelper } from "../helpers/journey";
 import { paginate } from "../helpers/pagination";
 import {
-  IMaterial,
-  IJourney,
-  IUserPath,
   Journey,
   UserPath,
   Material,
   ConversationTurn,
   InitialTemplate,
   UserAnswer,
+  AiFeedback,
+  IMaterial,
 } from "../models/_index";
 import {
   MaterialDetails,
@@ -20,7 +18,7 @@ import {
   checkAuth,
 } from "../utils/types";
 import ApiError from "../utils/error";
-import { DbHelper } from "../helpers/db";
+import { DbHelper, ObjectId, WithId } from "../helpers/db";
 import { AIModel } from "../helpers/ai/base";
 import { ConversationManager } from "../helpers/conversation";
 
@@ -110,6 +108,59 @@ export const userQueries: AppResolvers = {
     );
 
     return res;
+  },
+
+  path_materials: async (_, args, context) => {
+    checkAuth(context);
+
+    const r = await paginate("materials", args.pagination, {
+      additionalQuery: {
+        path_ID: args.id,
+      },
+    });
+
+    console.log(r.items.length, args.pagination.cursor);
+
+    if (r.items.length < 3 && !args.pagination.cursor) {
+      const path = await UserPath.findById(args.id);
+      if (!path) {
+        throw new Error("Path not found");
+      }
+
+      const newLength =
+        r.items.length + MaterialHelper.generatingCount(path._id.toHexString());
+
+      if (newLength > 3) {
+        return r;
+      }
+
+      const journey = await Journey.findById(path.journey_ID);
+      if (!journey) {
+        throw new Error("Journey not found");
+      }
+
+      MaterialHelper.preparePath(journey, path).catch((e) => {
+        console.error(e);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    const generatingMaterials = MaterialHelper.generatingPathMaterials(args.id);
+
+    for (const material of Object.keys(generatingMaterials)) {
+      const id = new ObjectId(material);
+      r.items.push({
+        _id: id,
+        __typename: "CreatingMaterial",
+        status: "PENDING",
+      });
+    }
+
+    for (const material of r.items) {
+      material.id = material._id.toHexString();
+    }
+
+    return r;
   },
 };
 export const userMutations: AppResolvers = {
@@ -275,6 +326,15 @@ export const userResolvers: AppResolvers = {
       const resolvedType = typesMapping[obj.type];
 
       return resolvedType;
+    },
+  },
+  AnyMaterial: {
+    __resolveType: (obj: any) => {
+      if (obj.metadata) {
+        return "Material";
+      }
+
+      return "CreatingMaterial";
     },
   },
   QuestionItem: {

@@ -4,6 +4,7 @@ import {
   IJourney,
   IMaterial,
   InitialTemplate,
+  IUser,
   IUserAnswer,
   IUserPath,
   Material,
@@ -20,11 +21,14 @@ import {
   MaterialType,
   ConversationDetails,
   QuizDetails,
+  PromptTags,
+  SupportedLocale,
 } from "../utils/types";
-import { initialPrompt } from "./prompts";
+import { initialMaterialGenerationPrompt, instructions } from "./prompts";
 import { PictureHelper } from "./picture";
 import { ConversationManager } from "./conversation";
-import { PromptBuilder } from "../utils/prompt-builder";
+import { msg, PromptBuilder } from "ai-prompter";
+import { materialGenInstructions } from "./prompts";
 
 function modifyMaterials(material: {
   details: MaterialDetails;
@@ -179,7 +183,7 @@ export class MaterialHelper {
     args: {
       journey: WithId<IJourney>;
       userPath: WithId<IUserPath>;
-      answers: WithId<IUserAnswer>[];
+      answer?: WithId<IUserAnswer> | null;
       requiredMaterials: {
         type: MaterialType;
         optional?: boolean;
@@ -196,49 +200,65 @@ export class MaterialHelper {
 
     this.generatingMaterials[pathId][genId] = new Promise<WithId<IMaterial>[]>(
       async (resolve, reject) => {
-        const res = await AIModel.generateMaterial(builder, args);
-
-        const materials: WithId<IMaterial>[] = [];
-        for (const material of res) {
-          const modified = modifyMaterials({
-            ...material,
-          });
-
-          const inserted = await Material.insertOne({
-            ...modified,
-            journey_ID: args.journey._id,
-            path_ID: args.userPath._id,
-            status: "PENDING",
-            user_ID: args.userPath.user_ID,
-          });
-
-          if (!inserted) {
-            throw new Error("Material not inserted");
+        try {
+          const user = await User.findById(args.userPath.user_ID);
+          if (!user) {
+            throw new Error("User not found");
           }
 
-          if (material.details.type === "CONVERSATION") {
-            User.findById(args.userPath.user_ID)
-              .then((user) => {
-                if (!user) {
-                  throw new Error("User not found");
-                }
+          const res = await AIModel.generateMaterial(builder, {
+            aiModel: args.journey.aiModel,
+            language: args.journey.to,
+            userPath: args.userPath,
+            journey: args.journey,
+            answer: args.answer,
+            requiredMaterials: args.requiredMaterials,
+          });
 
-                ConversationManager.prepareConversation(
-                  inserted._id,
-                  user
-                ).catch((err) => {
-                  console.log("ERR", err);
+          const materials: WithId<IMaterial>[] = [];
+          for (const material of res) {
+            const modified = modifyMaterials({
+              ...material,
+            });
+
+            const inserted = await Material.insertOne({
+              ...modified,
+              journey_ID: args.journey._id,
+              path_ID: args.userPath._id,
+              status: "PENDING",
+              user_ID: args.userPath.user_ID,
+            });
+
+            if (!inserted) {
+              throw new Error("Material not inserted");
+            }
+
+            if (material.details.type === "CONVERSATION") {
+              User.findById(args.userPath.user_ID)
+                .then((user) => {
+                  if (!user) {
+                    throw new Error("User not found");
+                  }
+
+                  ConversationManager.prepareConversation(
+                    inserted._id,
+                    user
+                  ).catch((err) => {
+                    console.error("ERR", err);
+                  });
+                })
+                .catch((err) => {
+                  console.error("ERR", err);
                 });
-              })
-              .catch((err) => {
-                console.log("ERR", err);
-              });
+            }
+
+            materials.push(inserted);
           }
 
-          materials.push(inserted);
+          resolve(materials);
+        } catch (e) {
+          reject(e);
         }
-
-        resolve(materials);
       }
     );
 
@@ -258,6 +278,114 @@ export class MaterialHelper {
     }
 
     return Object.keys(this.generatingMaterials[pathId]).length;
+  }
+
+  static generatingPathMaterials(pathId: string) {
+    return this.generatingMaterials[pathId] || [];
+  }
+
+  static async getPromptBuilder(args: {
+    user: WithId<IUser>;
+    journey: WithId<IJourney>;
+    path: WithId<IUserPath>;
+    answer?: WithId<IUserAnswer> | null;
+  }) {
+    const builder = new PromptBuilder({
+      userName: args.user.name,
+      language: args.journey.to,
+    });
+
+    await materialGenInstructions(builder, {
+      journey: args.journey,
+      userPath: args.path,
+      answer: args.answer,
+    });
+
+    return builder;
+  }
+
+  static async getInitialMaterials(
+    language: SupportedLocale,
+    level: 1 | 2 | 3,
+    aiModel: string
+  ) {
+    const template = await InitialTemplate.findOne({
+      locale: language,
+      level,
+    });
+
+    if (!template) {
+      const existingTemplates = await InitialTemplate.find({
+        locale: language,
+        aiModel: aiModel,
+        level: {
+          $gt: level,
+        },
+      });
+
+      const existingMaterials = existingTemplates.flatMap((t) =>
+        t.materials.map((m) => ({
+          level: t.level,
+          details: m.details,
+          metadata: m.metadata,
+        }))
+      );
+
+      const builder = new PromptBuilder({
+        userName: "unknown",
+        language: language,
+      });
+
+      builder.systemMessage(instructions.main, {
+        extra: {
+          tags: [PromptTags.MAIN],
+        },
+      });
+
+      initialMaterialGenerationPrompt(builder, existingMaterials, level);
+
+      const generated = await AIModel.generateMaterial(builder, {
+        aiModel: aiModel,
+        language: language,
+        requiredMaterials: [
+          {
+            type: "QUIZ",
+            optional: false,
+            description: "",
+          },
+          level === 3
+            ? {
+                type: "CONVERSATION",
+                optional: false,
+                description: "",
+              }
+            : null,
+        ].filter((e) => e !== null) as {
+          type: MaterialType;
+          optional?: boolean;
+          description?: string;
+        }[],
+      });
+
+      const modified = generated.map((material) => {
+        return modifyMaterials(material);
+      });
+
+      const inserted = await InitialTemplate.insertOne({
+        locale: language,
+        level,
+        materials: modified,
+        aiModel: aiModel,
+      });
+
+      if (!inserted) {
+        throw new Error("Template not inserted");
+      }
+
+      return inserted.materials;
+    }
+
+    return template.materials;
   }
 
   static async createMaterialForInitial(input: {
@@ -306,84 +434,19 @@ export class MaterialHelper {
 
     const initialLevel = path.initialLevel;
 
-    let template = await InitialTemplate.findOne({
-      locale: journey.to,
-      level: initialLevel,
-      aiModel: journey.aiModel,
-    });
+    let template = await this.getInitialMaterials(
+      journey.to,
+      initialLevel!,
+      journey.aiModel
+    );
 
     await Material.deleteMany({
       journey_ID: journey._id,
       path_ID: path._id,
     });
 
-    if (!template) {
-      const existingTemplates = await InitialTemplate.find({
-        locale: journey.to,
-        aiModel: journey.aiModel,
-        level: {
-          $gt: initialLevel,
-        },
-      });
-
-      const existingMaterials = existingTemplates.flatMap((t) =>
-        t.materials.map((m) => ({
-          level: t.level,
-          details: m.details,
-          metadata: m.metadata,
-        }))
-      );
-
-      const builder = new PromptBuilder();
-
-      initialPrompt(builder, existingMaterials, initialLevel!);
-
-      const generated = await AIModel.generateMaterial(builder, {
-        userPath: path,
-        journey,
-        requiredMaterials: [
-          {
-            type: "QUIZ",
-            optional: false,
-            description: "",
-          },
-          initialLevel === 3
-            ? {
-                type: "CONVERSATION",
-                optional: false,
-                description: "",
-              }
-            : null,
-        ].filter((e) => e !== null) as {
-          type: MaterialType;
-          optional?: boolean;
-          description?: string;
-        }[],
-      });
-
-      for (const material of generated) {
-        modifyMaterials(material);
-      }
-
-      await InitialTemplate.insertOne({
-        locale: journey.to,
-        level: initialLevel,
-        materials: generated,
-        aiModel: journey.aiModel,
-      });
-    }
-
-    template = await InitialTemplate.findOne({
-      locale: journey.to,
-      level: initialLevel,
-    });
-
-    if (!template) {
-      throw new Error("Template not found");
-    }
-
     const materials: WithId<IMaterial>[] = [];
-    for (const material of template.materials) {
+    for (const material of template) {
       const inserted = await Material.insertOne({
         journey_ID: journey._id,
         path_ID: path._id,
@@ -404,12 +467,12 @@ export class MaterialHelper {
 
               ConversationManager.prepareConversation(inserted._id, user).catch(
                 (err) => {
-                  console.log("ERR", err);
+                  console.error("ERR", err);
                 }
               );
             })
             .catch((err) => {
-              console.log("ERR", err);
+              console.error("ERR", err);
             });
         }
       }
@@ -420,8 +483,6 @@ export class MaterialHelper {
         stage: "1",
       },
     });
-
-    console.log("MATERIALS", materials);
 
     return materials;
   }
@@ -434,16 +495,65 @@ export class MaterialHelper {
   }
 
   static async preparePath(journey: WithId<IJourney>, path: WithId<IUserPath>) {
-    // Create a new 3 material for the path
-    const builder = new PromptBuilder();
+    const user = await User.findById(path.user_ID);
+    if (!user) {
+      throw new Error("User not found");
+    }
 
-    builder.userMessage("Create a new 3 material for the path");
+    // Create a new 3 material for the path
+    const builder = await this.getPromptBuilder({
+      user: user,
+      journey: journey,
+      path: path,
+    });
+
+    builder.userMessage("Create a new 3 material for the path", {
+      extra: {
+        tags: [PromptTags.MATERIAL],
+      },
+    });
+
+    const existingMaterials = await Material.find({
+      path_ID: path._id,
+    });
+
+    if (existingMaterials.length > 3) {
+      return;
+    }
+
+    let existingTypes: {
+      type: MaterialType;
+      optional?: boolean;
+      description?: string;
+    }[] = [
+      {
+        type: "QUIZ",
+        optional: false,
+        description: "General quiz material",
+      },
+      {
+        type: "CONVERSATION",
+        optional: false,
+        description: "Create a new conversation material for the path",
+      },
+      {
+        type: "QUIZ",
+        optional: false,
+        description:
+          "Secondary quiz material. User will answer this quiz after the complete first quiz and conversation.",
+      },
+    ];
+
+    for (const exists of existingMaterials) {
+      existingTypes = existingTypes.filter(
+        (t) => t.type !== exists.details.type
+      );
+    }
 
     await this.generateMaterial(builder, {
       journey: journey,
       userPath: path,
-      answers: [],
-      requiredMaterials: [],
+      requiredMaterials: existingTypes,
     });
   }
 
@@ -485,19 +595,22 @@ export class MaterialHelper {
         throw new Error("Conversation has no turns");
       }
 
-      let parts: string[] = ["Conversation:"];
+      const message = msg();
 
-      for (const turn of turns) {
-        parts.push(`- ${turn.character}: ${turn.text}`);
-        if (turn.analyze) {
-          parts.push("Analysis:");
-          for (const [key, value] of Object.entries(turn.analyze)) {
-            parts.push(`   ${key}: ${value}%`);
+      message.addKv("Conversation", (msg) => {
+        for (const turn of turns) {
+          msg.addKv(`- ${turn.character}`, turn.text);
+          if (turn.analyze) {
+            msg.addKv("Analysis", (msg) => {
+              for (const [key, value] of Object.entries(turn.analyze!)) {
+                msg.addKv(`${key}`, value);
+              }
+            });
           }
         }
-      }
+      });
 
-      answer = parts.join("\n");
+      answer = message.build();
     } else if (material.status !== "PENDING") {
       throw new Error("Material is not pending");
     } else {
@@ -546,18 +659,31 @@ export class MaterialHelper {
       ]);
 
       if (unAnsweredMaterials.length === 0) {
-        const builder = new PromptBuilder();
+        const user = await User.findById(path.user_ID);
+        if (!user) {
+          throw new Error("User not found");
+        }
+
+        const builder = await this.getPromptBuilder({
+          user: user,
+          journey: journey,
+          path: path,
+          answer: createdAnswer,
+        });
 
         builder.userMessage(
-          "Only analyze the user's answers. don't create any new materials."
+          "Only analyze the user's answers. don't create any new materials.",
+          {
+            extra: {
+              tags: [PromptTags.MATERIAL],
+            },
+          }
         );
 
         await this.generateMaterial(builder, {
           journey: journey,
           userPath: path,
-          answers: await UserAnswer.find({
-            path_ID: path._id,
-          }),
+          answer: createdAnswer,
           requiredMaterials: [],
         });
 
@@ -598,6 +724,34 @@ export class MaterialHelper {
           newPath: created._id,
         };
       } else {
+        const user = await User.findById(path.user_ID);
+        if (!user) {
+          throw new Error("User not found");
+        }
+
+        const builder = await this.getPromptBuilder({
+          user: user,
+          journey: journey,
+          path: path,
+          answer: createdAnswer,
+        });
+
+        builder.assistantMessage(
+          "Only analyze the user's answers. don't create any new materials.",
+          {
+            extra: {
+              tags: [PromptTags.MATERIAL],
+            },
+          }
+        );
+
+        await this.generateMaterial(builder, {
+          journey: journey,
+          userPath: path,
+          answer: createdAnswer,
+          requiredMaterials: [],
+        });
+
         return {
           answer: createdAnswer,
           next: "INITIAL_CONTINUE",
@@ -605,16 +759,22 @@ export class MaterialHelper {
         };
       }
     } else {
-      const builder = new PromptBuilder();
+      const user = await User.findById(path.user_ID);
+      if (!user) {
+        throw new Error("User not found");
+      }
 
-      builder.userMessage(
-        "Generate a new material. Only generate one material."
-      );
+      const builder = await this.getPromptBuilder({
+        user: user,
+        journey: journey,
+        path: path,
+        answer: createdAnswer,
+      });
 
       this.generateMaterial(builder, {
         journey: journey,
         userPath: path,
-        answers: [createdAnswer],
+        answer: createdAnswer,
         requiredMaterials: [
           {
             type: material.details.type,
@@ -623,7 +783,7 @@ export class MaterialHelper {
           },
         ],
       }).catch((err) => {
-        console.log("ERR", err);
+        console.error("ERR", err);
       });
 
       return {

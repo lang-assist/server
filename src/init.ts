@@ -1,7 +1,6 @@
 import { CacheHelper, DbHelper, Dbs, MongoClient } from "./helpers/db";
 
 import express from "express";
-import ApiError from "./utils/error";
 import http from "http";
 import { berberEnv } from "./utils/env";
 import { apiErrorHandler } from "./middleware/api_error_handler";

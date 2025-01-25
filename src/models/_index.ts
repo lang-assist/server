@@ -20,6 +20,8 @@
 
 
 
+
+
 export {
     Model as AdminRole,
     IModel as IAdminRole
@@ -36,6 +38,12 @@ export {
     Model as AiErrors,
     IModel as IAiErrors
 } from "./ai-errors"
+
+
+export {
+    Model as AiFeedback,
+    IModel as IAiFeedback
+} from "./ai-feedback"
 
 
 export {
@@ -84,6 +92,12 @@ export {
     Model as Meta,
     IModel as IMeta
 } from "./meta"
+
+
+export {
+    Model as Prompts,
+    IModel as IPrompts
+} from "./prompts"
 
 
 export {

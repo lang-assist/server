@@ -28,6 +28,7 @@
     "@graphql-tools/schema": "^10.0.10",
     "@graphql-tools/utils": "^10.6.1",
     "@maxmind/geoip2-node": "^5.0.0",
+    "ai-prompter": "^0.0.4-alpha",
     "bunyan": "^1.8.15",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",

@@ -56,8 +56,76 @@ export interface AIGenerationResponse {
   observations?: AIObservationEdit;
   weakPoints?: AIObservationEdit;
   strongPoints?: AIObservationEdit;
+  feedbacks?: AIFeedbackInterface[];
   // newDictionaryItems?: DictionaryItem[];
 }
+
+export interface AIFeedbackInterface {
+  type:
+    | "CORRECTION"
+    | "RECOMMENDATION"
+    | "EXPLANATION"
+    | "PRACTICE_TIP"
+    | "GENERAL_FEEDBACK"
+    | "OTHER";
+  question?: string; // reference to question. If feedback is about a quiz, this will refer to the question of the quiz.
+  turnIndex?: number; // reference to turn index. If feedback is about a conversation, this will refer to the turn index of the conversation.
+  parts: {
+    type: "WRONG" | "RIGHT" | "TIP" | "EXPLANATION" | "OTHER";
+    text: string;
+  }[];
+}
+
+export const aiFeedbackSchema = {
+  type: "object",
+  description:
+    "Each feedback must be formatted as described. Feedbacks are created for the user's answers and behaviors for a material. Consists of feedback parts. For example, you can create multiple parts for an answer to a question in a QUIZ. You make a correction in one part and give a tip or explanation in the other part. Part text will be displayed to the user in md format.",
+  properties: {
+    type: {
+      type: "string",
+      description: "Feedback type",
+      enum: [
+        "CORRECTION",
+        "RECOMMENDATION",
+        "EXPLANATION",
+        "PRACTICE_TIP",
+        "GENERAL_FEEDBACK",
+        "OTHER",
+      ],
+    },
+    question: {
+      type: "string",
+      description:
+        "Reference to question. If feedback is about a quiz, this will refer to the question of the quiz.",
+    },
+    turnIndex: {
+      type: "number",
+      description:
+        "Reference to turn index. If feedback is about a conversation, this will refer to the turn index of the conversation.",
+    },
+    parts: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["WRONG", "RIGHT", "TIP", "EXPLANATION", "OTHER"],
+          },
+          text: {
+            type: "string",
+            description:
+              "Feedback text. Will be displayed to the user in md format.",
+          },
+        },
+        required: ["type", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["type", "parts"],
+  additionalProperties: false,
+};
 
 export function aiReviewResponseSchema(
   required: ("newMaterials" | "observations" | "weakPoints" | "strongPoints")[]
@@ -70,6 +138,7 @@ export function aiReviewResponseSchema(
       Material: materialSchema,
       Edit: aiObservationEditSchema,
       PathLevel: pathLevelSchema,
+      Feedback: aiFeedbackSchema,
     },
     properties: {
       newMaterials: {
@@ -79,7 +148,9 @@ export function aiReviewResponseSchema(
           $ref: "#/definitions/Material",
         },
       },
-      newLevel: { $ref: "#/definitions/PathLevel" },
+      newLevel: {
+        oneOf: [{ $ref: "#/definitions/PathLevel" }, { type: "null" }],
+      },
       observations: {
         $ref: "#/definitions/Edit",
         description: "Observations about the user's answers and behaviors.",
@@ -91,6 +162,11 @@ export function aiReviewResponseSchema(
       strongPoints: {
         $ref: "#/definitions/Edit",
         description: "Strong points of the user's learning",
+      },
+      feedbacks: {
+        type: "array",
+        description: "Feedbacks for the user's answers and behaviors",
+        items: { $ref: "#/definitions/Feedback" },
       },
     },
     additionalProperties: false,

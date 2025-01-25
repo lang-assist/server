@@ -62,6 +62,11 @@ export interface AppContext extends BaseContext {
 //     }
 // }
 declare global {
+  namespace AIPrompter {
+    interface BuildingPrompt {
+      tags: string[];
+    }
+  }
   namespace Express {
     interface Request {
       log: bunyan;

@@ -1,13 +1,27 @@
-import { IUser } from "../models/_index";
-import { PromptBuilder } from "../utils/prompt-builder";
+import { MessageBuilder, msg, PromptBuilder } from "ai-prompter";
 import {
+  ConversationDetails,
   MaterialDetails,
   MaterialMetadata,
-  SupportedLocale,
+  PathLevel,
+  PromptTags,
+  QuizDetails,
 } from "../utils/types";
-import { summarizeMaterial } from "./instructions";
 import fs from "fs";
 import path from "path";
+import { ObjectId, WithId } from "mongodb";
+import {
+  ConversationTurn,
+  IJourney,
+  IUser,
+  IUserAnswer,
+  IUserPath,
+  Material,
+  Voices,
+} from "../models/_index";
+import { IMaterial } from "../models/_index";
+import { IConversation } from "microsoft-cognitiveservices-speech-sdk/distrib/lib/src/sdk/Transcription/IConversation";
+import { AIEmbeddingGenerator } from "./ai/base";
 
 export const supportedVoiceLocales = [
   "en_US",
@@ -105,15 +119,487 @@ export const supportedVoiceLocales = [
 
 export type SupportedVoiceLocale = (typeof supportedVoiceLocales)[number];
 
-export function getMainInstruction(language: SupportedLocale, user: IUser) {
-  const filePath = path.join(__dirname, "main_instructions.md");
+function readInstruction(file: string) {
+  const filePath = path.join(__dirname, "..", "..", "tools", "prompts", file);
   let fileContent = fs.readFileSync(filePath, "utf8");
-
-  fileContent = fileContent.replace("{{userName}}", user.name);
-  fileContent = fileContent.replace("{{language}}", language);
 
   return fileContent;
 }
+
+export const instructions = {
+  main: msg(readInstruction("main_instructions.md")),
+  conversation: msg(readInstruction("conversation_assistant.md")),
+};
+
+export function initialMaterialGenerationPrompt(
+  builder: PromptBuilder,
+  unanderstoodQuestions: {
+    level: 1 | 2 | 3;
+    details: MaterialDetails;
+    metadata: MaterialMetadata;
+  }[],
+  level: 1 | 2 | 3
+): void {
+  builder.systemMessage(
+    "User not started the learning yet. We don't have any information about him. So we will start with the initial test.",
+    {
+      extra: {
+        tags: [PromptTags.PATH],
+      },
+    }
+  );
+
+  if (level === 3) {
+    builder.systemMessage(
+      `
+In itial test we need 2 materials:
+
+1. QUIZ: a quiz with only one TEXT_INPUT_WRITE question. 
+
+2. CONVERSATION: A conversation material for medium level.
+
+With the materials we will get the user's general lanugage skills. We leave a free field because we do not know the user's level. It will also create a background for the materail we will create for the user later. Pretend that the learning process is between 40% and 60%
+
+      `,
+      {
+        extra: {
+          tags: [PromptTags.MATERIAL],
+        },
+      }
+    );
+  } else if (level === 2) {
+    builder.systemMessage(
+      `
+We asked questions before but user didn't understand them:
+      `,
+      {
+        extra: {
+          tags: [PromptTags.MATERIAL],
+        },
+      }
+    );
+
+    unanderstoodQuestions
+      .filter((q) => q.level === 3)
+      .forEach((q) => summarizeMaterial(builder, q as any));
+
+    builder.systemMessage(
+      `
+We need to create a new quiz and conversation for the user:
+
+1. QUIZ: A quiz with more simple questions(5 questions) than the ones above.
+
+2. CONVERSATION: A conversation for more basic dialogue.
+
+These materials for should be beginner-medium level. The user may not know even the simplest words. Pretend that the learning process is between 20% and 40%        
+        `,
+      {
+        extra: {
+          tags: [PromptTags.MATERIAL],
+        },
+      }
+    );
+  } else {
+    builder.systemMessage(
+      `
+We asked questions before but user didn't understand them:      
+      `,
+      {
+        extra: {
+          tags: [PromptTags.MATERIAL],
+        },
+      }
+    );
+
+    unanderstoodQuestions
+      .filter((q) => q.level > 1)
+      .forEach((q) => summarizeMaterial(builder, q as any));
+
+    builder.systemMessage(
+      `
+We need to create a new quiz for the user, which will be easier than above quizzes:
+
+1. QUIZ: A quiz with more simple questions(~5-10 questions) than the ones above. The user may not know even the simplest words.Pretend that the learning process is between 0% and 10%
+
+NOTE: Before we created a conversation for the user. Now we don't need it because the user level is too low. DONT create a conversation.
+
+      `,
+      {
+        extra: {
+          tags: [PromptTags.MATERIAL],
+        },
+      }
+    );
+  }
+}
+
+export function summarizeMaterial(
+  builder: PromptBuilder,
+  material: {
+    details: MaterialDetails;
+    metadata: MaterialMetadata;
+  }
+): void {
+  const message = msg();
+
+  message.addKv("Material ID", material.metadata.id);
+  message.addKv("Type", material.details.type);
+  message.addKv("Title", material.metadata.title);
+  message.addKv("Focus", material.metadata.focusAreas.join(", "));
+
+  message.addKv("Details", (detailsMsg) => {
+    switch (material.details.type) {
+      case "QUIZ":
+        const details = material.details as QuizDetails;
+
+        if (details.preludes) {
+          detailsMsg.addKv("Preludes are:", (preludesMsg) => {
+            for (const prelude of details.preludes!) {
+              preludesMsg.addKv("ID", prelude.id);
+
+              for (const part of prelude.parts) {
+                preludesMsg.add(msg(part.content || part.picturePrompt || ""));
+              }
+            }
+          });
+        }
+
+        detailsMsg.addKv("Questions are", (questionMsg) => {
+          for (const question of details.questions) {
+            questionMsg.addKv(`Question "${question.id}"`, question.question);
+            questionMsg.addKv("Type", question.type);
+
+            if (question.choices) {
+              questionMsg.addKv("Choices", (choicesMsg) => {
+                for (const choice of question.choices!) {
+                  choicesMsg.addKv(choice.id, choice.text);
+                  if (choice.picturePrompt) {
+                    choicesMsg.add(msg(choice.picturePrompt));
+                  }
+                }
+              });
+            }
+
+            if (question.items) {
+              questionMsg.addKv("Items", (itemsMsg) => {
+                for (const item of question.items!) {
+                  itemsMsg.addKv(item.id, item.text);
+                  if (item.picturePrompt) {
+                    itemsMsg.add(msg(item.picturePrompt));
+                  }
+                }
+              });
+            }
+
+            if (question.secondItems) {
+              questionMsg.addKv("Second items", (secondItemsMsg) => {
+                for (const item of question.secondItems!) {
+                  secondItemsMsg.addKv(item.id, item.text);
+                  if (item.picturePrompt) {
+                    secondItemsMsg.add(msg(item.picturePrompt));
+                  }
+                }
+              });
+            }
+          }
+        });
+
+        break;
+      case "CONVERSATION":
+        const conversation = material.details as ConversationDetails;
+
+        detailsMsg.addKv("Scenario", conversation.scenarioScaffold);
+        detailsMsg.addKv("User instructions", conversation.instructions);
+
+        detailsMsg.addKv("Characters", (charactersMsg) => {
+          for (const character of conversation.characters) {
+            charactersMsg.addKv(character.name, msg(character.description));
+          }
+        });
+
+        detailsMsg.addKv("Expected turn count", conversation.length);
+
+        break;
+      default:
+        throw new Error("Invalid material type");
+    }
+  });
+
+  builder.assistantMessage(message, {
+    extra: {
+      tags: [PromptTags.MATERIAL],
+    },
+  });
+}
+
+async function summarizeMaterialAndAnswers(
+  builder: PromptBuilder,
+  material: WithId<IMaterial>,
+  answer: WithId<IUserAnswer>
+): Promise<void> {
+  summarizeMaterial(builder, {
+    details: material.details,
+    metadata: material.metadata,
+  });
+
+  const message = msg("Answers for material {{materialId}}:", {
+    materialId: material.metadata.id,
+  });
+
+  await message.addAsync(async (detailsMsg) => {
+    switch (material.details.type) {
+      case "QUIZ":
+        const answers = answer.answers as {
+          [key: string]: string;
+        };
+
+        for (const [key, value] of Object.entries(answers)) {
+          detailsMsg.addKv(`"${key}"`, `${value}`);
+        }
+
+        break;
+      case "CONVERSATION":
+        if (material.status !== "COMPLETED") {
+          throw new Error("Material is not completed");
+        }
+
+        const turns = await ConversationTurn.find({
+          material_ID: material._id,
+        });
+
+        if (turns.length === 0) {
+          throw new Error("Conversation has no turns");
+        }
+
+        detailsMsg.addKv(
+          `Conversation completed with the following turns`,
+          (turnsMsg) => {
+            for (const turn of turns) {
+              turnsMsg.addKv(`- ${turn.character}`, turn.text);
+              if (turn.analyze) {
+                turnsMsg.addKv("Analysis", (analysisMsg) => {
+                  for (const [key, value] of Object.entries(turn.analyze!)) {
+                    analysisMsg.addKv(`${key}`, `${value}%`);
+                  }
+                });
+              }
+            }
+          }
+        );
+        break;
+      default:
+        throw new Error("Invalid material type");
+    }
+  });
+
+  builder.userMessage(message, {
+    extra: {
+      tags: [PromptTags.MATERIAL],
+    },
+  });
+}
+
+export async function summarizeAnswer(
+  builder: PromptBuilder,
+  answer: WithId<IUserAnswer>
+): Promise<void> {
+  const material = await Material.findById(answer.material_ID);
+
+  if (!material) {
+    throw new Error("Material not found");
+  }
+
+  await summarizeMaterialAndAnswers(builder, material, answer);
+}
+
+function _userJourneyInstructions(
+  builder: PromptBuilder,
+  journey: WithId<IJourney>
+) {
+  builder.systemMessage(
+    (journeyMsg) => {
+      journeyMsg.addKv("User name", "{{userName}}");
+      journeyMsg.addKv("Journey to learning", "{{language}}");
+    },
+    {
+      extra: {
+        tags: [PromptTags.JOURNEY],
+      },
+    }
+  );
+}
+
+function _userCurrentStateInstructions(
+  builder: PromptBuilder,
+  userPath: WithId<IUserPath>
+): void {
+  const message = msg();
+
+  switch (userPath.type) {
+    case "PROFESSION":
+      message.add(
+        `The user is currently learning for professional purposes. He is a ${userPath.profession}.`
+      );
+      break;
+    case "GENERAL":
+      message.add(`The user is currently learning for general purposes.`);
+      break;
+    case "INITIAL":
+      message.add(
+        `The user is currently not started learning. We don't know anything about him/her.`
+      );
+      break;
+  }
+
+  const progress = userPath.progress;
+
+  if (progress) {
+    const level = progress.level ?? {};
+    if (
+      Object.keys(level).filter((key) => level[key as keyof PathLevel] !== -1)
+        .length > 0
+    ) {
+      message.add("User current level is:");
+      for (const key in level) {
+        if (level[key as keyof PathLevel] !== -1) {
+          message.add(msg(`${key}: ${level[key as keyof PathLevel]}`));
+        }
+      }
+    }
+
+    if (progress.strongPoints && progress.strongPoints.length > 0) {
+      message.add("User strong points are:");
+      for (const point of progress.strongPoints) {
+        message.add(msg(`${point}`));
+      }
+    }
+
+    if (progress.weakPoints && progress.weakPoints.length > 0) {
+      message.add("User weak points are:");
+      for (const point of progress.weakPoints) {
+        message.add(msg(`${point}`));
+      }
+    }
+
+    if (progress.observations && progress.observations.length > 0) {
+      message.add("Our observations are:");
+      for (const observation of progress.observations) {
+        message.add(msg(`${observation}`));
+      }
+    }
+  }
+
+  builder.systemMessage(message, {
+    extra: {
+      tags: [PromptTags.PATH],
+    },
+  });
+}
+
+export async function materialGenInstructions(
+  builder: PromptBuilder,
+  args: {
+    journey: WithId<IJourney>;
+    userPath: WithId<IUserPath>;
+    answer?: WithId<IUserAnswer> | null;
+  }
+): Promise<void> {
+  builder.systemMessage(instructions.main, {
+    extra: {
+      tags: [PromptTags.MAIN],
+    },
+  });
+
+  _userJourneyInstructions(builder, args.journey);
+
+  _userCurrentStateInstructions(builder, args.userPath);
+
+  if (args.answer) {
+    await summarizeAnswer(builder, args.answer);
+  }
+}
+
+export async function conversationGenInstructions(
+  builder: PromptBuilder,
+  args: {
+    conversation: WithId<IMaterial>;
+    userPath: WithId<IUserPath>;
+    journey: WithId<IJourney>;
+  }
+) {
+  builder.systemMessage(instructions.conversation, {
+    extra: {
+      tags: [PromptTags.MAIN],
+    },
+  });
+
+  _userJourneyInstructions(builder, args.journey);
+
+  _userCurrentStateInstructions(builder, args.userPath);
+
+  summarizeMaterial(builder, {
+    details: args.conversation.details,
+    metadata: args.conversation.metadata,
+  });
+
+  const conversationCharacters = (
+    args.conversation.details as ConversationDetails
+  ).characters;
+
+  const voices = (args.conversation.details as ConversationDetails).voices;
+
+  if (!voices) {
+    throw new Error("Voices not found. Select voices for conversation.");
+  }
+
+  const charactersInstructionsResult = await Promise.all(
+    Object.entries(voices).map(async ([key, value]) => {
+      const voice = await Voices.findById(new ObjectId(value));
+      if (!voice) {
+        throw new Error("Voice not found");
+      }
+
+      const character = conversationCharacters.find((c) => c.name === key);
+      if (!character) {
+        throw new Error("Character not found");
+      }
+
+      return {
+        [key]: AIEmbeddingGenerator.voiceInstructions(voice, {
+          overrideSingleLocale: character.locale,
+          withStyles: true,
+          withShortName: true,
+          withPersonalities: false,
+          withSecondaryLocales: false,
+          withTailoredScenarios: false,
+        }),
+      };
+    })
+  );
+
+  const charactersInstructions: {
+    [key: string]: MessageBuilder;
+  } = Object.assign({}, ...charactersInstructionsResult);
+
+  builder.assistantMessage(
+    (conversationMsg) => {
+      conversationMsg.addKv(
+        "We select voices for conversation characters:",
+        (detailsMsg) => {
+          for (const [key, value] of Object.entries(charactersInstructions)) {
+            detailsMsg.addKv(`${key}`, value);
+          }
+        }
+      );
+    },
+    {
+      extra: {
+        tags: [PromptTags.MATERIAL],
+      },
+    }
+  );
+}
+
 //   return `
 // # Language Learning Assistant
 
@@ -844,210 +1330,3 @@ export function getMainInstruction(language: SupportedLocale, user: IUser) {
 
 // `;
 // }
-
-export function getConversationMainInstruction() {
-  return `
-You are advanced language learning assistant. In our platform, there are different types of learning materials. One of the materials is CONVERSATION. 
-
-Conversation is a material that contains a conversation between a user and one or more characters. In initial state, conversation topic, characters and their descriptions are defined. Conversation's created by considering the user's learning journey, so the language level, strong points, weak points, etc. A conversation object includes the goal of the material, characters, and their descriptions, scenario scaffold, user instructions, etc.
-
-Approximately a certain number of conversation turns must be created to complete a conversation material. The platform user creates the turns of the "$user" character. It is your job to create the conversation turns of other characters.
-
-Your task is to generate a conversation turn for the character(s). The user's conversation turns are passed through an STT service and transmitted to you as text.
-
-A conversation always begins with a turn by a character other than the user. Until it is the user's turn to speak, you are responsible for creating one or more conversation turns.
-
-You will be given the necessary information about the user language journey, material, etc.
-
-The tour you create will have a plain text and a voiceover script in SSML format. Later, this text in SSML format will be vocalized using a TTS service. 
-
-
-We use microsoft azure as TTS service. Azure has some rules:
-
-Speak root element: 
-
-\`\`\`
-<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="string" xmlns:mstts="http://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml"></speak>
-\`\`\`
-
-Single voice example:
-
-\`\`\`
-<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US" xmlns:mstts="http://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml">
-    <voice name="en-US-AvaNeural">
-        This is the text that is spoken.
-    </voice>
-</speak>
-\`\`\`
-
-Break example:
-
-\`\`\`
-<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US" xmlns:mstts="http://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml">
-    <voice name="en-US-AvaNeural">
-        Welcome <break /> to text to speech.
-        Welcome <break strength="medium" /> to text to speech.
-        Welcome <break time="750ms" /> to text to speech.
-    </voice>
-</speak>
-\`\`\`
-
-Break attributes:
-
-You can use one of the attributes.
-
-- strength: "x-weak", "weak", "medium" (default), "strong", "x-strong"
-- time: "750ms" (default) or "1s" or "1500ms"
-
-Silence example:
-
-Use \`<mstts:silence type="Sentenceboundary" value="200ms"/>\` to add a silence of 200ms at between sentences.
-
-\`\`\`
-<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml" xml:lang="en-US">
-<voice name="en-US-AvaNeural">
-<mstts:silence  type="Sentenceboundary" value="200ms"/>
-If we're home schooling, the best we can do is roll with what each day brings and try to have fun along the way.
-A good place to start is by trying out the slew of educational apps that are helping children stay happy and smash their schooling at the same time.
-</voice>
-</speak>
-\`\`\`
-
-There are other types of silence. You can use them as needed:
-"Leading" (natural), 
-"Leading-exact" (with exact time from the value attribute),
-"Trailing" (natural),
-"Trailing-exact" (with exact time from the value attribute),
-"Sentenceboundary" (natural),
-"Sentenceboundary-exact" (with exact time from the value attribute),
-"Comma-exact" (with exact time from the value attribute),
-"Semicolon-exact" (with exact time from the value attribute),
-"Enumerationcomma-exact" (with exact time from the value attribute),
- 
-
-Specify paragraphs and sentences:
-
-The p and s elements are used to denote paragraphs and sentences, respectively. In the absence of these elements, the Speech service automatically determines the structure of the SSML document.
-
-Styles & Roles:
-
-\`\`\`
-<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml" xml:lang="zh-CN">
-    <voice name="zh-CN-XiaomoNeural">
-        <mstts:express-as style="sad" styledegree="2">
-            快走吧，路上一定要注意安全，早去早回。
-        </mstts:express-as>
-    </voice>
-</speak>
-\`\`\`
-
-\`style\` attribute:
-
-The styles in which a voice can vocalize are recorded in the voice entry in the vector store. Do not use a style other than those. You can also change styles within a sentence, There can be different styles in different parts of the same speech.
-
-
-\`styledegree\` attribute:
-
-The styledegree attribute is used to specify the degree of style change. The value ranges from 0.01 to 2. The default value is 1. Steps are 0.01.
-
-You can also use "Role" attribute. Roles are also includes voice entry in the vector store.
-
-\`\`\`
-<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml" xml:lang="zh-CN">
-    <voice name="zh-CN-XiaomoNeural">
-        女儿看见父亲走了进来，问道：
-        <mstts:express-as role="YoungAdultFemale" style="calm">
-            “您来的挺快的，怎么过来的？”
-        </mstts:express-as>
-        父亲放下手提包，说：
-        <mstts:express-as role="OlderAdultMale" style="calm">
-            “刚打车过来的，路上还挺顺畅。”
-        </mstts:express-as>
-    </voice>
-</speak>
-\`\`\`
-
-
-Rules for creating conversation:
-- There are styles that characters can voice in instructions. Consider these when creating a turn for a character to reflect the emotions that are appropriate for the scenario and the character's description. Also, use these styles as needed in the SSML you create.
-- Use exclamations, breaks, etc. effectively to create natural speech.
-- Use voice styles effectively. Reflecting emotions and situations is important.
-- When creating ssml, use the voice styles as needed.
-- DO NOT CREATE A NEW VOICE. Only use the voices as described in the instructions.
-
-### RESPONSE FORMAT:
-1. Follow the exact JSON schema provided
-3. Return ONLY the requested data
-4. NO additional messages or explanations
-5. NO markdown or formatting
-6. NO pleasantries or conversation
-7. Use ONLY the language of the user learning journey. Except one of the character use different language (This will be defined in the material and character's description).
-8. Conversation always should end with the other character's turn. Not the user's turn.
-9. If you decide that the conversation is finished with the created turn, return 'nextTurn' as "null" and 'turn' the last turn.
-10. Always include xml namespaces in the ssml as described in the examples.
-11. When decide to the next turn is user's turn, always refer to the user as "\$user" in nextTurn field. MUST be started with "\$"
-12. DON'T refer to the user as "\$user" in the 'ssml' or 'text' field. User name will be provided.
-`;
-}
-
-export function initialPrompt(
-  builder: PromptBuilder,
-  unanderstoodQuestions: {
-    level: 1 | 2 | 3;
-    details: MaterialDetails;
-    metadata: MaterialMetadata;
-  }[],
-  level: 1 | 2 | 3
-): void {
-  builder.systemMessage(
-    "User not started the learning yet. We don't have any information about him. So we will start with the initial test."
-  );
-
-  if (level === 3) {
-    builder.systemMessage(`
-In itial test we need 2 materials:
-
-1. QUIZ: a quiz with only one TEXT_INPUT_WRITE question. 
-
-2. CONVERSATION: A conversation material for medium level.
-
-With the materials we will get the user's general lanugage skills. We leave a free field because we do not know the user's level. It will also create a background for the materail we will create for the user later. Pretend that the learning process is between 40% and 60%
-
-      `);
-  } else if (level === 2) {
-    builder.systemMessage(`
-We asked questions before but user didn't understand them:
-      `);
-
-    unanderstoodQuestions
-      .filter((q) => q.level === 3)
-      .forEach((q) => summarizeMaterial(builder, q as any));
-
-    builder.systemMessage(`
-We need to create a new quiz and conversation for the user:
-
-1. QUIZ: A quiz with more simple questions(5 questions) than the ones above.
-
-2. CONVERSATION: A conversation for more basic dialogue.
-
-These materials for should be beginner-medium level. The user may not know even the simplest words. Pretend that the learning process is between 20% and 40%        
-        `);
-  } else {
-    builder.systemMessage(`
-We asked questions before but user didn't understand them:      
-      `);
-
-    unanderstoodQuestions
-      .filter((q) => q.level > 1)
-      .forEach((q) => summarizeMaterial(builder, q as any));
-
-    builder.systemMessage(`
-We need to create a new quiz for the user, which will be easier than above quizzes:
-
-1. QUIZ: A quiz with more simple questions(~5-10 questions) than the ones above. The user may not know even the simplest words.Pretend that the learning process is between 0% and 10%
-
-NOTE: Before we created a conversation for the user. Now we don't need it because the user level is too low. DONT create a conversation.
-
-      `);
-  }
-}

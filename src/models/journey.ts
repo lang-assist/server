@@ -12,6 +12,7 @@ interface IModel extends TimeFields {
   status: "active" | "completed" | "paused";
   aiModel: string;
   assistantId?: string;
+  assistantHash?: string;
 }
 
 const Model = DbHelper.model<IModel>({

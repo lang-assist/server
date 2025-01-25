@@ -11,14 +11,13 @@ import {
   Voices,
 } from "../models/_index";
 import { AIEmbeddingGenerator, AIModel } from "./ai/base";
-import { AIMessages, ConversationDetails } from "../utils/types";
-import { summarizeMaterial } from "./instructions";
-import { journeyInstructions } from "./instructions";
+import { ConversationDetails, PromptTags } from "../utils/types";
 import { StorageService } from "./storage";
 import { AzureVoice } from "./voice/azure";
 import { AIConversationTurnResponse } from "../utils/ai-types";
 import { AudioHelper } from "./audio";
-import { PromptBuilder } from "../utils/prompt-builder";
+import { PromptBuilder } from "ai-prompter";
+import { conversationGenInstructions } from "./prompts";
 
 export class ConversationManager {
   private static _preparingConversations: {
@@ -84,53 +83,16 @@ export class ConversationManager {
         throw new Error("Conversation not found");
       }
 
-      const conversationCharacters = (
-        conversation.details as ConversationDetails
-      ).characters;
+      const builder = new PromptBuilder({
+        userName: user.name,
+        language: journey.to,
+      });
 
-      const charactersInstructionsResult = await Promise.all(
-        Object.entries(characters).map(async ([key, value]) => {
-          const voice = await Voices.findById(new ObjectId(value));
-          if (!voice) {
-            throw new Error("Voice not found");
-          }
-
-          const character = conversationCharacters.find((c) => c.name === key);
-          if (!character) {
-            throw new Error("Character not found");
-          }
-
-          return {
-            [key]: AIEmbeddingGenerator.voiceInstructions(voice, {
-              overrideSingleLocale: character.locale,
-              withStyles: true,
-              withShortName: true,
-              withPersonalities: false,
-              withSecondaryLocales: false,
-              withTailoredScenarios: false,
-            }),
-          };
-        })
-      );
-
-      const charactersInstructions = Object.assign(
-        {},
-        ...charactersInstructionsResult
-      );
-
-      const builder = new PromptBuilder();
-
-      await journeyInstructions(builder, {
+      await conversationGenInstructions(builder, {
         journey: journey,
         userPath: userPath,
+        conversation: conversation,
       });
-
-      summarizeMaterial(builder, {
-        details: conversation.details,
-        metadata: conversation.metadata,
-      });
-
-      builder.systemMessage(`USER NAME: ${user.name}`);
 
       const prepareRes = await AIModel.prepareConversation(
         builder,
@@ -142,8 +104,20 @@ export class ConversationManager {
 
       let nextTurn: string | null = null;
 
+      builder.assistantMessage("We don't generate turns for now", {
+        extra: {
+          tags: [PromptTags.TURNS],
+        },
+      });
+      builder.userMessage("Generate first turn", {
+        extra: {
+          tags: [PromptTags.TURNS],
+        },
+      });
+
       do {
         const createRes = await AIModel.generateConversationTurn(
+          builder,
           conversation,
           journey,
           nextTurn,
@@ -229,11 +203,6 @@ export class ConversationManager {
       throw new Error("Failed to create conversation turn");
     }
 
-    console.log(
-      "OUT TO STREAM CONTROLLER",
-      this._converationOutputControllers[id]
-    );
-
     this._converationOutputControllers[id]?.enqueue({
       turn: created,
       nextTurn: nextTurn,
@@ -274,6 +243,11 @@ export class ConversationManager {
       throw new Error("Material not found");
     }
 
+    const userPath = await UserPath.findById(material.path_ID);
+    if (!userPath) {
+      throw new Error("User path not found");
+    }
+
     const journey = await Journey.findById(material.journey_ID);
     if (!journey) {
       throw new Error("Journey not found");
@@ -310,11 +284,20 @@ export class ConversationManager {
 
     new Promise(async (resolve, reject) => {
       try {
+        const builder = new PromptBuilder();
+
+        await conversationGenInstructions(builder, {
+          journey: journey,
+          userPath: userPath,
+          conversation: material!,
+        });
+
         for await (const userTurn of inputStream) {
           let nextTurn: string | null = null;
 
           in_while: do {
             const createdRes = await AIModel.generateConversationTurn(
+              builder,
               material!,
               journey,
               nextTurn,
@@ -348,7 +331,6 @@ export class ConversationManager {
     };
 
     for await (const output of outputStream) {
-      console.log("OUT TO STREAM", output);
       yield output;
     }
 
@@ -385,8 +367,6 @@ export class ConversationManager {
     if (!created) {
       throw new Error("Failed to add user input");
     }
-
-    console.log(created, this._converationInputControllers[id]);
 
     if (!this._converationInputControllers[id]) {
       await ConversationTurn.findByIdAndDelete(created._id);

@@ -333,6 +333,7 @@ import { Terms } from "./models/_index";
 import { AIEmbeddingGenerator, AIImageGenerator } from "./helpers/ai/base";
 import { FakeImageGenerator } from "./helpers/ai/fake_img";
 import { StorageService } from "./helpers/storage";
+import { mainInstructions } from "./prompts/main";
 
 init(
   berberEnv.SERVER_PORT,
@@ -394,7 +395,7 @@ init(
         schema: setDirectives(schema),
         introspection: true,
         formatError: (error) => {
-          console.log("ERROR", error);
+          console.error("ERROR", error);
           return {
             message: error.message,
             locations: error.locations,
@@ -471,19 +472,10 @@ init(
     ),
   });
 
+  console.log(mainInstructions.build());
+
   // await AIEmbeddingGenerator.deleteVoiceEmbeddings();
   // await AIEmbeddingGenerator.deleteIndex();
   // await AIEmbeddingGenerator.generateEmbeddingsForVoices();
   // await AIEmbeddingGenerator.cacheVoiceEmbeddings();
-  // const voices = await AIEmbeddingGenerator.searchVoice({
-  //   gender: "Male",
-  //   query:
-  //     "A MALE who must speak (tr-TR, tr-TR, Turkish)\nA friendly doctor willing to help the patient.\nAvailable for the schenario: a conversation where a doctor and a patient discuss health symptoms.",
-  // });
-  // console.log(
-  //   voices.map((v) => ({
-  //     ...v,
-  //     embedding: undefined,
-  //   }))
-  // );
 });
