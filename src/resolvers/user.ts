@@ -8,8 +8,8 @@ import {
   ConversationTurn,
   InitialTemplate,
   UserAnswer,
+  UserDoc,
   AiFeedback,
-  IMaterial,
 } from "../models/_index";
 import {
   MaterialDetails,
@@ -21,6 +21,9 @@ import ApiError from "../utils/error";
 import { DbHelper, ObjectId, WithId } from "../helpers/db";
 import { AIModel } from "../helpers/ai/base";
 import { ConversationManager } from "../helpers/conversation";
+import crypto from "crypto";
+import { TermManager } from "../helpers/term";
+import { DocumentationManager } from "../helpers/documentation";
 
 export const userQueries: AppResolvers = {
   my_journeys: async (_, args, context) => {
@@ -113,54 +116,81 @@ export const userQueries: AppResolvers = {
   path_materials: async (_, args, context) => {
     checkAuth(context);
 
+    console.log(args);
     const r = await paginate("materials", args.pagination, {
       additionalQuery: {
         path_ID: args.id,
       },
     });
 
-    console.log(r.items.length, args.pagination.cursor);
-
-    if (r.items.length < 3 && !args.pagination.cursor) {
-      const path = await UserPath.findById(args.id);
-      if (!path) {
-        throw new Error("Path not found");
-      }
-
-      const newLength =
-        r.items.length + MaterialHelper.generatingCount(path._id.toHexString());
-
-      if (newLength > 3) {
-        return r;
-      }
-
-      const journey = await Journey.findById(path.journey_ID);
-      if (!journey) {
-        throw new Error("Journey not found");
-      }
-
-      MaterialHelper.preparePath(journey, path).catch((e) => {
-        console.error(e);
-      });
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-
-    const generatingMaterials = MaterialHelper.generatingPathMaterials(args.id);
-
-    for (const material of Object.keys(generatingMaterials)) {
-      const id = new ObjectId(material);
-      r.items.push({
-        _id: id,
-        __typename: "CreatingMaterial",
-        status: "PENDING",
-      });
-    }
-
-    for (const material of r.items) {
-      material.id = material._id.toHexString();
-    }
+    console.log(r);
 
     return r;
+  },
+
+  parsed_units: async (_, args, context) => {
+    checkAuth(context);
+
+    const text = args.text;
+    const journeyId = args.journeyId;
+
+    const res = await TermManager.resolve(text, journeyId);
+
+    return res;
+  },
+  documentation: async (_, args, context) => {
+    checkAuth(context);
+
+    const journey = await Journey.findById(args.input.journeyId);
+    if (!journey) {
+      throw new Error("Journey not found");
+    }
+
+    console.log(args.input);
+
+    const res = await DocumentationManager.findOrCreateDocumentation({
+      journey,
+      title: args.input.title,
+      searchTerm: args.input.searchTerm,
+    });
+
+    console.log(res);
+
+    return {
+      __typename: "UserDoc",
+      ...res.doc,
+    };
+  },
+  journey_docs: async (_, args, context) => {
+    checkAuth(context);
+
+    const docs = await UserDoc.find({
+      journey_ID: args.journeyId,
+      user_ID: context.user!._id,
+    });
+
+    return docs;
+  },
+  material_feedbacks: async (_, args, context) => {
+    checkAuth(context);
+
+    const materialId = args.materialId;
+
+    const pathId = args.pathId;
+
+    if (MaterialHelper.generatingMaterials[pathId]) {
+      const gens = MaterialHelper.generatingMaterials[pathId];
+
+      for (const gen of Object.values(gens)) {
+        if (gen.answeredMaterial === materialId) {
+          await gen.promise;
+        }
+      }
+    }
+
+    return await AiFeedback.find({
+      material_ID: materialId,
+    });
   },
 };
 export const userMutations: AppResolvers = {
@@ -175,13 +205,65 @@ export const userMutations: AppResolvers = {
     checkAuth(context);
 
     try {
+      console.log(args.input);
       const res = await MaterialHelper.answerMaterial(args.input);
-
+      console.log(res);
       return res;
     } catch (e) {
       console.error(e);
       throw ApiError.e500("Failed to answer material");
     }
+  },
+  regenerate_material: async (_, args, context) => {
+    checkAuth(context);
+
+    const res = await MaterialHelper.regenerateMaterial(args.materialId);
+
+    return res;
+  },
+  prepare_material: async (_, args, context) => {
+    checkAuth(context);
+
+    const material = await Material.findById(args.materialId);
+    if (!material) {
+      throw new Error("Material not found");
+    }
+
+    const journey = await Journey.findById(material.journey_ID);
+    if (!journey) {
+      throw new Error("Journey not found");
+    }
+
+    const res = await MaterialHelper.prepareMaterial({
+      materialId: args.materialId,
+      language: journey.to,
+    });
+
+    return res;
+  },
+
+  gen_material: async (_, args, context) => {
+    checkAuth(context);
+
+    const { journeyId, pathId, type } = args.input;
+
+    const journey = await Journey.findById(journeyId);
+    if (!journey) {
+      throw new Error("Journey not found");
+    }
+
+    const path = await UserPath.findById(pathId);
+    if (!path) {
+      throw new Error("Path not found");
+    }
+
+    const res = await MaterialHelper.testGenMaterial({
+      journey: journey,
+      userPath: path,
+      requiredMaterials: [{ type: type }],
+    });
+
+    return res;
   },
   // start_conversation: async (_, args, context) => {
   //   checkAuth(context);
@@ -323,20 +405,13 @@ export const userSubscriptions: AppResolvers = {
 export const userResolvers: AppResolvers = {
   MaterialDetails: {
     __resolveType: (obj: MaterialDetails) => {
+      if (!obj) return null;
       const resolvedType = typesMapping[obj.type];
 
       return resolvedType;
     },
   },
-  AnyMaterial: {
-    __resolveType: (obj: any) => {
-      if (obj.metadata) {
-        return "Material";
-      }
 
-      return "CreatingMaterial";
-    },
-  },
   QuestionItem: {
     hasPicture: (parent) => {
       return !!parent.pictureId || !!parent.picturePrompt;
@@ -347,13 +422,24 @@ export const userResolvers: AppResolvers = {
       return !!parent.pictureId || !!parent.picturePrompt;
     },
   },
+  StoryPart: {
+    hasPicture: (parent) => {
+      return !!parent.pictureId || !!parent.picturePrompt;
+    },
+  },
   Material: {
     type: (parent) => {
-      return parent.details.type;
+      return parent.details?.type ?? "UNKNOWN";
     },
     answer: async (parent) => {
       return await UserAnswer.findOne({
         material_ID: parent._id,
+      });
+    },
+    unseenAiFeedbacks: async (parent) => {
+      return await AiFeedback.count({
+        material_ID: parent._id,
+        seen: false,
       });
     },
   },

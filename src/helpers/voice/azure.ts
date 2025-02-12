@@ -1,15 +1,28 @@
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 import path from "path";
 import fs from "fs";
-import { OpenAIModel } from "../ai/chatgpt";
-import { Meta, Voices } from "../../models/_index";
 import { randomString } from "../../utils/random";
 
 export class AzureVoice {
   constructor() {}
 
   static async init() {
-    // await this.getVoices();
+    await this.getAuthToken();
+  }
+
+  static async getVoices() {
+    const token = await this.getAuthToken();
+    const response = await fetch(
+      `https://${process.env
+        .AZURE_SPEECH_REGION!}.tts.speech.microsoft.com/cognitiveservices/voices/list`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    const data = await response.json();
+    console.log(data);
   }
 
   //   static async getVoices() {
@@ -288,8 +301,10 @@ export class AzureVoice {
       text: string;
       analyze: any;
     } | null>((resolve, reject) => {
+      console.log("HERE 4 ");
       speechRecognizer.recognizeOnceAsync(
         (result) => {
+          console.log("HERE 3 ", result);
           switch (result.reason) {
             case sdk.ResultReason.RecognizedSpeech:
               const analyze = this.getAnalyze(result.json);
@@ -308,6 +323,7 @@ export class AzureVoice {
           }
         },
         (error) => {
+          console.error("SPEECH TO TEXT ERROR", error);
           reject(error);
         }
       );
@@ -323,7 +339,13 @@ export class AzureVoice {
     return result;
   }
 
-  static async speak(ssml: string): Promise<Buffer> {
+  private static _wrap = (ssml: string, language: string) =>
+    `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${language.replace(
+      "_",
+      "-"
+    )}" xmlns:mstts="http://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml">${ssml}</speak>`;
+
+  static async speak(ssml: string, language: string): Promise<Buffer> {
     const speechConfig = sdk.SpeechConfig.fromSubscription(
       process.env.AZURE_SPEECH_TOKEN!,
       process.env.AZURE_SPEECH_REGION!
@@ -342,7 +364,7 @@ export class AzureVoice {
 
     const result = await new Promise<Buffer>((resolve, reject) => {
       speechSynthesizer.speakSsmlAsync(
-        ssml,
+        this._wrap(ssml, language),
         (result) => {
           if (result.audioData) {
             resolve(Buffer.from(result.audioData));

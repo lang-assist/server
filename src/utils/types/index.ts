@@ -15,3 +15,5 @@ export * from "./material-details";
 export * from "./material";
 export * from "./metadata";
 export * from "./prompt";
+export * from "./documentation";
+export * from "./dictionary";

@@ -22,6 +22,11 @@
 
 
 
+
+
+
+
+
 export {
     Model as AdminRole,
     IModel as IAdminRole
@@ -71,6 +76,24 @@ export {
 
 
 export {
+    Model as DocSearch,
+    IModel as IDocSearch
+} from "./doc-search"
+
+
+export {
+    Model as DocTemplate,
+    IModel as IDocTemplate
+} from "./doc-template"
+
+
+export {
+    Model as GenerationEntry,
+    IModel as IGenerationEntry
+} from "./generation-entry"
+
+
+export {
     Model as InitialTemplate,
     IModel as IInitialTemplate
 } from "./initial-template"
@@ -80,6 +103,12 @@ export {
     Model as Journey,
     IModel as IJourney
 } from "./journey"
+
+
+export {
+    Model as MaterialTemplate,
+    IModel as IMaterialTemplate
+} from "./material-template"
 
 
 export {
@@ -128,6 +157,12 @@ export {
     Model as UserAnswer,
     IModel as IUserAnswer
 } from "./user-answer"
+
+
+export {
+    Model as UserDoc,
+    IModel as IUserDoc
+} from "./user-doc"
 
 
 export {

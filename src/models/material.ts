@@ -1,24 +1,22 @@
 import { ObjectId } from "mongodb";
 
 import { DbHelper, TimeFields } from "../helpers/db";
-import {
-  MaterialStatus,
-  MaterialDetails,
-  MaterialMetadata,
-} from "../utils/types";
+import { MaterialDetails, MaterialMetadata } from "../utils/types";
 
 interface IModel extends TimeFields {
   user_ID: ObjectId;
   journey_ID: ObjectId;
   path_ID: ObjectId;
-  status: MaterialStatus;
+  genStatus: "CREATING" | "PREPARING" | "COMPLETED" | "ERROR";
+  compStatus: "NOT_STARTED" | "COMPLETED" | "ANALYZING" | "ERROR";
+  convStatus: "NOT_STARTED" | "COMPLETED" | "PENDING";
   details: MaterialDetails;
   metadata: MaterialMetadata;
   step: number;
   assistantId?: string;
   threadId?: string;
   instructions?: string;
-  preparing?: boolean;
+  genId: string;
 }
 
 const Model = DbHelper.model<IModel>({
@@ -30,6 +28,9 @@ const Model = DbHelper.model<IModel>({
   indexes: [
     {
       key: { user_ID: 1, journey_ID: 1, step: 1 },
+    },
+    {
+      key: { genId: 1 },
     },
   ],
 });

@@ -1,6 +1,8 @@
 import { ObjectId, WithId } from "mongodb";
 import {
+  AiFeedback,
   ConversationTurn,
+  IAiFeedback,
   IJourney,
   IMaterial,
   InitialTemplate,
@@ -9,315 +11,397 @@ import {
   IUserPath,
   Material,
   User,
-  UserAnswer,
   UserPath,
 } from "../models/_index";
 import { Journey } from "../models/_index";
-import { AIModel } from "./ai";
-import { randomColor } from "../utils/random";
-import {
-  MaterialDetails,
-  MaterialMetadata,
-  MaterialType,
-  ConversationDetails,
-  QuizDetails,
-  PromptTags,
-  SupportedLocale,
-} from "../utils/types";
-import { initialMaterialGenerationPrompt, instructions } from "./prompts";
-import { PictureHelper } from "./picture";
+import { MaterialType, QuizDetails } from "../utils/types";
 import { ConversationManager } from "./conversation";
-import { msg, PromptBuilder } from "ai-prompter";
-import { materialGenInstructions } from "./prompts";
+import { msg } from "ai-prompter";
+import { AzureVoice } from "./voice/azure";
+import { StorageService } from "./storage";
+import { BaseMaterialTypeHelper } from "./materials/base";
+import { ConversationMaterialTypeHelper } from "./materials/conversation";
+import { QuizMaterialTypeHelper } from "./materials/quiz";
+import { StoryMaterialTypeHelper } from "./materials/story";
+import { undefinedOrValue } from "../utils/validators";
+import { AIFeedbackInterface, AIGenerationResponse } from "../utils/ai-types";
+import {
+  InitialMaterialGenerationContext,
+  MaterialGenerationContext,
+} from "./material-gen";
+import { AIModel } from "./ai";
 
-function modifyMaterials(material: {
-  details: MaterialDetails;
-  metadata: MaterialMetadata;
-}): {
-  metadata: MaterialMetadata;
-  details: MaterialDetails;
-} {
-  material.metadata.avatar = randomColor();
+// function modifyMaterials(
+//   language: string,
 
-  switch (material.details.type) {
-    case "CONVERSATION":
-      const characters = (material.details as ConversationDetails).characters;
+//   material: {
+//     details: MaterialDetails;
+//     metadata: MaterialMetadata;
+//   }
+// ): {
+//   metadata: MaterialMetadata;
+//   details: MaterialDetails;
+// } {
+//   material.metadata.avatar = randomColor();
 
-      const newCharacters = characters.map((c) => {
-        if (c.name === "$user") {
-          return c;
-        }
+//   switch (material.details.type) {
+//     case "QUIZ":
+//       break;
 
-        const id = new ObjectId();
+//     case "STORY":
+//       const parts = (material.details as StoryDetails).parts;
 
-        PictureHelper.generateItemPicture({
-          itemId: id,
-          prompt: c.avatarPrompt,
-        }).catch(() => {
-          return id.toHexString();
-        });
+//       for (const part of parts) {
+//         if (part.type === "PICTURE" && part.picturePrompt) {
+//           const id = new ObjectId();
+//           PictureHelper.generateItemPicture({
+//             itemId: id,
+//             prompt: part.picturePrompt,
+//           });
 
-        return {
-          ...c,
-          avatar: id.toHexString(),
-        };
-      });
+//           part.pictureId = id.toHexString();
+//         } else if (part.type === "AUDIO" && part.ssml) {
+//           part.audioId = speechAudio(part.ssml!, language);
+//         } else if (part.type === "QUESTION" && part.question) {
+//           part.question = modifyQuestion(part.question);
+//         }
+//       }
 
-      (material.details as ConversationDetails).characters = newCharacters;
+//       break;
+//   }
 
-      break;
+//   return {
+//     metadata: material.metadata,
+//     details: material.details,
+//   };
+// }
 
-    case "QUIZ":
-      const questions = (material.details as QuizDetails).questions;
-
-      const newQuestions = questions.map((q) => {
-        const items = q.items?.map((i) => {
-          if (!i.picturePrompt) {
-            return i;
-          }
-
-          const id = new ObjectId();
-          PictureHelper.generateItemPicture({
-            itemId: id,
-            prompt: i.picturePrompt,
-          }).catch(() => {
-            return id.toHexString();
-          });
-
-          return {
-            ...i,
-            pictureId: id.toHexString(),
-          };
-        });
-
-        const choices = q.choices?.map((c) => {
-          if (!c.picturePrompt) {
-            return c;
-          }
-
-          const id = new ObjectId();
-          PictureHelper.generateItemPicture({
-            itemId: id,
-            prompt: c.picturePrompt,
-          });
-
-          return {
-            ...c,
-            pictureId: id.toHexString(),
-          };
-        });
-
-        const secondItems = q.secondItems?.map((i) => {
-          if (!i.picturePrompt) {
-            return i;
-          }
-
-          const id = new ObjectId();
-          PictureHelper.generateItemPicture({
-            itemId: id,
-            prompt: i.picturePrompt,
-          }).catch(() => {
-            return id.toHexString();
-          });
-
-          return {
-            ...i,
-            pictureId: id.toHexString(),
-          };
-        });
-
-        return {
-          ...q,
-          items: items,
-          choices: choices,
-          secondItems: secondItems,
-        };
-      });
-
-      (material.details as QuizDetails).questions = newQuestions;
-
-      const preludes = (material.details as QuizDetails).preludes;
-
-      if (preludes && preludes.length > 0) {
-        const newPreludes = preludes.map((p) => {
-          if (p.parts.length > 0) {
-            for (const part of p.parts) {
-              if (part.type === "PICTURE" && part.picturePrompt) {
-                const id = new ObjectId();
-                PictureHelper.generateItemPicture({
-                  itemId: id,
-                  prompt: part.picturePrompt!,
-                }).catch(() => {
-                  return id.toHexString();
-                });
-
-                part.pictureId = id.toHexString();
-              }
-            }
-          }
-
-          return p;
-        });
-
-        (material.details as QuizDetails).preludes = newPreludes;
-      }
-
-      break;
-  }
-
-  return {
-    metadata: material.metadata,
-    details: material.details,
-  };
-}
+type GenerationPromise = Promise<{
+  material: WithId<IMaterial> | null;
+  feedbacks: WithId<IAiFeedback>[];
+}>;
 
 export class MaterialHelper {
   static generatingMaterials: {
     [path: string]: {
-      [genId: string]: Promise<WithId<IMaterial>[]>;
+      [materialId: string]: {
+        ctx: MaterialGenerationContext;
+        promise: GenerationPromise;
+      };
     };
   } = {};
 
-  static generateMaterial(
-    builder: PromptBuilder,
-    args: {
-      journey: WithId<IJourney>;
-      userPath: WithId<IUserPath>;
-      answer?: WithId<IUserAnswer> | null;
-      requiredMaterials: {
-        type: MaterialType;
-        optional?: boolean;
-        description?: string;
-      }[];
-    }
-  ) {
-    const genId = new ObjectId().toHexString();
-    const pathId = args.userPath._id.toHexString();
+  static analyzingMaterials: {
+    [path: string]: {
+      [materialId: string]: {
+        ctx: MaterialGenerationContext;
+        promise: GenerationPromise;
+      };
+    };
+  } = {};
 
-    if (!this.generatingMaterials[pathId]) {
+  static async handleFeedbacks(
+    ctx: MaterialGenerationContext,
+    feedback: AIFeedbackInterface
+  ) {
+    const inserted = await AiFeedback.insertOne({
+      feedback,
+      seen: false,
+      user_ID: ctx.user._id,
+      material_ID: ctx.material!._id,
+    });
+
+    if (!inserted) {
+      throw new Error("Feedback not inserted");
+    }
+
+    return inserted;
+  }
+
+  static async prepareMaterial(
+    ctx: MaterialGenerationContext,
+    result: AIGenerationResponse
+  ): Promise<{
+    material: WithId<IMaterial> | null;
+    feedbacks: WithId<IAiFeedback>[];
+  }> {
+    if (!result) {
+      ctx.addError(new Error("Material not created"));
+      return {
+        material: null,
+
+        feedbacks: [],
+      };
+    }
+
+    const newMaterials = undefinedOrValue(result.newMaterials, undefined);
+
+    if (ctx.generatingMaterial && !newMaterials) {
+      ctx.addError(new Error("Required materials not created"));
+      return {
+        material: null,
+        feedbacks: [],
+      };
+    }
+
+    let matPromise: Promise<void> | null = null;
+
+    if (ctx.generatingMaterial) {
+      if (!ctx.generatingMaterial.material) {
+        ctx.addError(new Error("Generation not started correctly"));
+        return {
+          material: null,
+          feedbacks: [],
+        };
+      }
+
+      const mat = ctx.generatingMaterial.material;
+
+      if (!mat) {
+        ctx.addError(new Error("Required material not created"));
+        return {
+          material: null,
+          feedbacks: [],
+        };
+      }
+
+      matPromise = BaseMaterialTypeHelper.prepare(ctx);
+    }
+
+    const feedbackPromises: Promise<WithId<IAiFeedback> | null>[] = [];
+
+    if (ctx.userAnswer && result.feedbacks && ctx.material) {
+      const aiFeedbackRes = result.feedbacks;
+
+      for (const feedback of aiFeedbackRes) {
+        feedbackPromises.push(this.handleFeedbacks(ctx, feedback));
+      }
+    }
+
+    if (matPromise) {
+      await matPromise;
+    }
+
+    const feedbacks = (await Promise.all(feedbackPromises)).filter(
+      (f) => f !== null
+    ) as WithId<IAiFeedback>[];
+
+    return {
+      material: ctx.generatingMaterial?.material || null,
+      feedbacks: feedbacks.filter((f) => f !== null) as WithId<IAiFeedback>[],
+    };
+  }
+
+  static async addGen(ctx: MaterialGenerationContext): Promise<{
+    material: WithId<IMaterial> | null;
+    feedbacks: WithId<IAiFeedback>[];
+  }> {
+    const pathId = ctx.path._id.toHexString();
+
+    const genMaterialId = ctx.generatingMaterial?.material._id.toHexString();
+    const analyzingMaterialId = ctx.material?._id.toHexString();
+
+    if (genMaterialId && !this.generatingMaterials[pathId]) {
       this.generatingMaterials[pathId] = {};
     }
 
-    this.generatingMaterials[pathId][genId] = new Promise<WithId<IMaterial>[]>(
-      async (resolve, reject) => {
-        try {
-          const user = await User.findById(args.userPath.user_ID);
-          if (!user) {
-            throw new Error("User not found");
-          }
+    if (analyzingMaterialId && !this.analyzingMaterials[pathId]) {
+      this.analyzingMaterials[pathId] = {};
+    }
 
-          const res = await AIModel.generateMaterial(builder, {
-            aiModel: args.journey.aiModel,
-            language: args.journey.to,
-            userPath: args.userPath,
-            journey: args.journey,
-            answer: args.answer,
-            requiredMaterials: args.requiredMaterials,
-          });
+    const promise = new Promise<{
+      material: WithId<IMaterial> | null;
+      feedbacks: WithId<IAiFeedback>[];
+    }>(async (resolve, reject) => {
+      const res = await AIModel.generate(ctx);
 
-          const materials: WithId<IMaterial>[] = [];
-          for (const material of res) {
-            const modified = modifyMaterials({
-              ...material,
-            });
+      const prepRes = await this.prepareMaterial(ctx, res);
 
-            const inserted = await Material.insertOne({
-              ...modified,
-              journey_ID: args.journey._id,
-              path_ID: args.userPath._id,
-              status: "PENDING",
-              user_ID: args.userPath.user_ID,
-            });
+      resolve(prepRes);
+    });
 
-            if (!inserted) {
-              throw new Error("Material not inserted");
-            }
+    if (genMaterialId) {
+      this.generatingMaterials[pathId][genMaterialId] = {
+        ctx,
+        promise,
+      };
+    }
 
-            if (material.details.type === "CONVERSATION") {
-              User.findById(args.userPath.user_ID)
-                .then((user) => {
-                  if (!user) {
-                    throw new Error("User not found");
-                  }
+    if (analyzingMaterialId) {
+      this.analyzingMaterials[pathId][analyzingMaterialId] = {
+        ctx,
+        promise,
+      };
+    }
 
-                  ConversationManager.prepareConversation(
-                    inserted._id,
-                    user
-                  ).catch((err) => {
-                    console.error("ERR", err);
-                  });
-                })
-                .catch((err) => {
-                  console.error("ERR", err);
-                });
-            }
-
-            materials.push(inserted);
-          }
-
-          resolve(materials);
-        } catch (e) {
-          reject(e);
-        }
+    promise.finally(() => {
+      if (genMaterialId) {
+        delete this.generatingMaterials[pathId][genMaterialId];
       }
-    );
 
-    this.generatingMaterials[pathId][genId].finally(() => {
-      delete this.generatingMaterials[pathId][genId];
+      if (analyzingMaterialId) {
+        delete this.analyzingMaterials[pathId][analyzingMaterialId];
+      }
+
       if (Object.keys(this.generatingMaterials[pathId]).length === 0) {
         delete this.generatingMaterials[pathId];
       }
+
+      if (Object.keys(this.analyzingMaterials[pathId]).length === 0) {
+        delete this.analyzingMaterials[pathId];
+      }
     });
 
-    return this.generatingMaterials[pathId][genId];
+    return promise;
   }
+
+  static async testGenMaterial(args: {
+    journeyId: ObjectId;
+    pathId: ObjectId;
+    user: WithId<IUser>;
+    requiredMaterials: {
+      material?: WithId<IMaterial>;
+      type: MaterialType;
+      optional?: boolean;
+      description?: string;
+    };
+  }) {
+    if (!args.requiredMaterials.material) {
+      args.requiredMaterials.material = await this.createPreparingMaterial({
+        userId: args.user._id,
+        journeyId: args.journeyId,
+        pathId: args.pathId,
+      });
+    }
+
+    const ctx = await MaterialGenerationContext.create({
+      user: args.user,
+      journeyId: args.journeyId,
+      pathId: args.pathId,
+    });
+
+    const result = await this.addGen(ctx);
+
+    return result.material;
+  }
+
+  static async createPreparingMaterial(args: {
+    userId: ObjectId;
+    journeyId: ObjectId;
+    pathId: ObjectId;
+    id?: ObjectId;
+  }) {
+    const material = await Material.insertOne(
+      {
+        genStatus: "CREATING",
+        compStatus: "NOT_STARTED",
+        convStatus: "NOT_STARTED",
+        user_ID: args.userId,
+        journey_ID: args.journeyId,
+        path_ID: args.pathId,
+      },
+      args.id
+    );
+
+    if (!material) {
+      throw new Error("Material not inserted");
+    }
+
+    return material;
+  }
+
+  static async regenerateMaterial(materialId: ObjectId, user: WithId<IUser>) {
+    const material = await Material.findById(materialId);
+    if (!material) {
+      throw new Error("Material not found");
+    }
+
+    await Material.findByIdAndDelete(materialId);
+
+    const mat = await this.createPreparingMaterial({
+      userId: material.user_ID,
+      journeyId: material.journey_ID,
+      pathId: material.path_ID,
+    });
+
+    const ctx = await MaterialGenerationContext.create({
+      user: user,
+      journeyId: material.journey_ID,
+      pathId: material.path_ID,
+      generatingMaterial: {
+        type: material.details.type,
+        material: mat,
+        optional: false,
+        description: "",
+      },
+    });
+
+    const result = await this.addGen(ctx);
+
+    return result.material;
+  }
+
+  // static async prepareMaterial(input: {
+  //   materialId: ObjectId;
+  //   language: string;
+  // }): Promise<WithId<IMaterial>> {
+  //   const material = await Material.findById(input.materialId);
+  //   if (!material) {
+  //     throw new Error("Material not found");
+  //   }
+
+  //   modifyMaterials(input.language, material);
+
+  //   const modified = await Material.findByIdAndUpdate(material._id, {
+  //     $set: {
+  //       details: material.details,
+  //       metadata: material.metadata,
+  //     },
+  //   });
+
+  //   if (!modified) {
+  //     throw new Error("Material not updated");
+  //   }
+
+  //   return modified;
+  // }
 
   static generatingCount(pathId: string) {
     if (!this.generatingMaterials[pathId]) {
       return 0;
     }
 
-    return Object.keys(this.generatingMaterials[pathId]).length;
+    let count = 0;
+
+    for (const _ in this.generatingMaterials[pathId]) {
+      count += 1;
+    }
+
+    return count;
   }
 
-  static generatingPathMaterials(pathId: string) {
-    return this.generatingMaterials[pathId] || [];
-  }
+  static generatingPathMaterials(pathId: string): string[] {
+    if (!this.generatingMaterials[pathId]) {
+      return [];
+    }
 
-  static async getPromptBuilder(args: {
-    user: WithId<IUser>;
-    journey: WithId<IJourney>;
-    path: WithId<IUserPath>;
-    answer?: WithId<IUserAnswer> | null;
-  }) {
-    const builder = new PromptBuilder({
-      userName: args.user.name,
-      language: args.journey.to,
-    });
-
-    await materialGenInstructions(builder, {
-      journey: args.journey,
-      userPath: args.path,
-      answer: args.answer,
-    });
-
-    return builder;
+    return Object.keys(this.generatingMaterials[pathId]);
   }
 
   static async getInitialMaterials(
-    language: SupportedLocale,
-    level: 1 | 2 | 3,
-    aiModel: string
+    journey: WithId<IJourney>,
+    level: 1 | 2 | 3
   ) {
     const template = await InitialTemplate.findOne({
-      locale: language,
+      locale: journey.to,
       level,
+      aiModel: journey.aiModel,
     });
 
     if (!template) {
       const existingTemplates = await InitialTemplate.find({
-        locale: language,
-        aiModel: aiModel,
+        locale: journey.to,
+        aiModel: journey.aiModel,
         level: {
           $gt: level,
         },
@@ -331,51 +415,38 @@ export class MaterialHelper {
         }))
       );
 
-      const builder = new PromptBuilder({
-        userName: "unknown",
-        language: language,
+      const ctx = new InitialMaterialGenerationContext({
+        journey,
+        level,
+        existingInitMaterials: existingMaterials,
       });
 
-      builder.systemMessage(instructions.main, {
-        extra: {
-          tags: [PromptTags.MAIN],
-        },
-      });
+      const result = await AIModel.generate<"material">(ctx);
 
-      initialMaterialGenerationPrompt(builder, existingMaterials, level);
+      const newMaterials = undefinedOrValue(result.newMaterials, {});
 
-      const generated = await AIModel.generateMaterial(builder, {
-        aiModel: aiModel,
-        language: language,
-        requiredMaterials: [
-          {
-            type: "QUIZ",
-            optional: false,
-            description: "",
-          },
-          level === 3
-            ? {
-                type: "CONVERSATION",
-                optional: false,
-                description: "",
-              }
-            : null,
-        ].filter((e) => e !== null) as {
-          type: MaterialType;
-          optional?: boolean;
-          description?: string;
-        }[],
-      });
+      if (!newMaterials) {
+        throw new Error("No new materials");
+      }
 
-      const modified = generated.map((material) => {
-        return modifyMaterials(material);
-      });
+      BaseMaterialTypeHelper.prepareInitial(
+        ctx,
+        [
+          newMaterials.QUIZ,
+          newMaterials.CONVERSATION,
+          newMaterials.STORY,
+        ].filter((m) => m !== undefined)
+      );
 
       const inserted = await InitialTemplate.insertOne({
-        locale: language,
+        locale: journey.to,
         level,
-        materials: modified,
-        aiModel: aiModel,
+        materials: [
+          newMaterials.QUIZ,
+          newMaterials.CONVERSATION,
+          newMaterials.STORY,
+        ].filter((m) => m !== undefined),
+        aiModel: journey.aiModel,
       });
 
       if (!inserted) {
@@ -434,11 +505,7 @@ export class MaterialHelper {
 
     const initialLevel = path.initialLevel;
 
-    let template = await this.getInitialMaterials(
-      journey.to,
-      initialLevel!,
-      journey.aiModel
-    );
+    let template = await this.getInitialMaterials(journey, initialLevel!);
 
     await Material.deleteMany({
       journey_ID: journey._id,
@@ -451,7 +518,9 @@ export class MaterialHelper {
         journey_ID: journey._id,
         path_ID: path._id,
         user_ID: path.user_ID,
-        status: "PENDING",
+        compStatus: "NOT_STARTED",
+        genStatus: "COMPLETED",
+        convStatus: "NOT_STARTED",
         metadata: material.metadata,
         details: material.details,
         step: 0,
@@ -487,104 +556,151 @@ export class MaterialHelper {
     return materials;
   }
 
-  static withIntend(text: string) {
-    return text
-      .split("\n")
-      .map((t) => `  ${t}`)
-      .join("\n");
-  }
-
-  static async preparePath(journey: WithId<IJourney>, path: WithId<IUserPath>) {
-    const user = await User.findById(path.user_ID);
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    // Create a new 3 material for the path
-    const builder = await this.getPromptBuilder({
-      user: user,
-      journey: journey,
-      path: path,
-    });
-
-    builder.userMessage("Create a new 3 material for the path", {
-      extra: {
-        tags: [PromptTags.MATERIAL],
-      },
-    });
-
-    const existingMaterials = await Material.find({
-      path_ID: path._id,
-    });
-
-    if (existingMaterials.length > 3) {
-      return;
-    }
-
-    let existingTypes: {
-      type: MaterialType;
-      optional?: boolean;
-      description?: string;
-    }[] = [
-      {
-        type: "QUIZ",
-        optional: false,
-        description: "General quiz material",
-      },
-      {
-        type: "CONVERSATION",
-        optional: false,
-        description: "Create a new conversation material for the path",
-      },
-      {
-        type: "QUIZ",
-        optional: false,
-        description:
-          "Secondary quiz material. User will answer this quiz after the complete first quiz and conversation.",
-      },
-    ];
-
-    for (const exists of existingMaterials) {
-      existingTypes = existingTypes.filter(
-        (t) => t.type !== exists.details.type
-      );
-    }
-
-    await this.generateMaterial(builder, {
-      journey: journey,
-      userPath: path,
-      requiredMaterials: existingTypes,
-    });
-  }
-
-  static async answerMaterial(input: {
-    materialId: ObjectId;
-    answer: any;
-  }): Promise<{
+  static async handleInitialAnswer(args: {
+    existingPath: WithId<IUserPath>;
+    journey: WithId<IJourney>;
+    user: WithId<IUser>;
     answer: WithId<IUserAnswer>;
+    material: WithId<IMaterial>;
+  }): Promise<{
     next: "CREATING_NEW" | "INITIAL_END" | "INITIAL_CONTINUE";
     newPath: ObjectId | null;
+    newGen: string | null;
   }> {
-    const material = await Material.findById(input.materialId);
-    if (!material) {
-      throw new Error("Material not found");
-    }
+    // Check all materials answered
+    const unAnsweredMaterials = await Material.find({
+      completionStatus: "NOT_STARTED",
+    });
 
-    const path = await UserPath.findById(material.path_ID);
-    if (!path) {
-      throw new Error("Path not found");
-    }
+    const existingPath = args.existingPath;
 
-    const journey = await Journey.findById(path.journey_ID);
-    if (!journey) {
-      throw new Error("Journey not found");
-    }
+    if (unAnsweredMaterials.length === 0) {
+      // check if analyzing already
+      const currentlyGenerating =
+        this.generatingMaterials[existingPath._id.toHexString()];
 
+      if (currentlyGenerating) {
+        await Promise.all(
+          Object.values(currentlyGenerating).map((g) => g.promise)
+        );
+      }
+
+      const created = await UserPath.insertOne({
+        journey_ID: args.journey._id,
+        user_ID: args.user._id,
+        type: "GENERAL",
+        isActive: true,
+        isMain: true,
+        progress: existingPath.progress,
+        name: "General",
+        lastStudyDate: Date.now(),
+        description: "General path",
+      });
+
+      if (!created) {
+        throw new Error("Path not created");
+      }
+
+      const ctx = new MaterialGenerationContext({
+        journey: args.journey,
+        path: created,
+        user: args.user,
+        userAnswer: args.answer,
+        material: args.material,
+        generatingMaterial: {
+          type: "STORY",
+          material: await this.createPreparingMaterial({
+            userId: args.user._id,
+            journeyId: args.journey._id,
+            pathId: created._id,
+          }),
+        },
+      });
+
+      await this.addGen(ctx);
+
+      const ctxs = [
+        new MaterialGenerationContext({
+          journey: args.journey,
+          path: created,
+          user: args.user,
+          generatingMaterial: {
+            type: "QUIZ",
+            material: await this.createPreparingMaterial({
+              userId: args.user._id,
+              journeyId: args.journey._id,
+              pathId: created._id,
+            }),
+          },
+        }),
+        new MaterialGenerationContext({
+          journey: args.journey,
+          path: created,
+          user: args.user,
+          generatingMaterial: {
+            type: "CONVERSATION",
+            material: await this.createPreparingMaterial({
+              userId: args.user._id,
+              journeyId: args.journey._id,
+              pathId: created._id,
+            }),
+          },
+        }),
+      ];
+
+      for (const ctx of ctxs) {
+        await this.addGen(ctx);
+      }
+
+      // Deactivate old path
+      await UserPath.findByIdAndUpdate(existingPath._id, {
+        $set: {
+          isActive: false,
+          isMain: false,
+        },
+      });
+
+      return {
+        next: "INITIAL_END",
+        newPath: created._id,
+        newGen: null,
+      };
+    } else {
+      const analyzeGen = new NewMaterialGen(
+        new MaterialGenerationContext({
+          journey: args.journey,
+          path: existingPath,
+          user: args.user,
+          generatingMaterial: undefined,
+        }),
+        "material"
+      );
+
+      this.addGen(analyzeGen);
+
+      analyzeGen.generate();
+
+      return {
+        next: "INITIAL_CONTINUE",
+        newPath: null,
+        newGen: null,
+      };
+    }
+  }
+
+  static async prepareAnswer(args: {
+    answer: any;
+    material: WithId<IMaterial>;
+  }) {
     let answer: any | undefined = undefined;
 
+    const material = args.material;
+    if (material.compStatus !== "NOT_STARTED") {
+      throw new Error("Material already answered");
+    }
     if (material.details.type === "CONVERSATION") {
-      if (material.status !== "COMPLETED") {
-        throw new Error("Material is not completed");
+      if (material.convStatus !== "COMPLETED") {
+        throw new Error("Conversation is not completed");
       }
 
       const turns = await ConversationTurn.find({
@@ -611,185 +727,125 @@ export class MaterialHelper {
       });
 
       answer = message.build();
-    } else if (material.status !== "PENDING") {
-      throw new Error("Material is not pending");
+    } else if (material.details.type === "QUIZ") {
+      answer = args.answer as {
+        [key: string]: any;
+      };
+
+      const recordQuestions = (
+        material.details as QuizDetails
+      ).questions.filter((q) => q.type === "RECORD");
+
+      for (const question of recordQuestions) {
+        if (!answer[question.id]) {
+          throw new Error("Answer is missing for question: " + question.id);
+        }
+
+        if (!ObjectId.isValid(answer[question.id])) {
+          throw new Error(
+            "Answer is not a valid audio id: " + answer[question.id]
+          );
+        }
+
+        try {
+          const buffer = await StorageService.getAudio(
+            new ObjectId(answer[question.id] as string)
+          );
+
+          if (!buffer) {
+            throw new Error("Audio not found");
+          }
+
+          console.log("HERE 2 Before transcription");
+
+          const transcription = await AzureVoice.speechToText(buffer);
+
+          console.log("HERE 3 After transcription", transcription);
+
+          const message = msg();
+
+          message.addKv("Transcription", transcription.text);
+
+          if (transcription.analyze) {
+            message.add((analysis) => {
+              analysis.addKv("Analysis", (msg) => {
+                for (const [key, value] of Object.entries(
+                  transcription.analyze
+                )) {
+                  msg.addKv(`${key}`, value as any);
+                }
+              });
+            });
+          }
+
+          answer[question.id] = message.build();
+        } catch (e) {
+          console.error("ERR", e);
+          throw new Error("Error transcribing audio");
+        }
+      }
     } else {
-      answer = input.answer;
+      answer = args.answer;
     }
 
-    const createdAnswer = await UserAnswer.insertOne({
-      material_ID: material._id,
-      path_ID: path._id,
-      user_ID: material.user_ID,
-      answers: answer,
+    return answer;
+  }
+
+  static async answerMaterial(input: {
+    materialId: ObjectId;
+    user: WithId<IUser>;
+    answer: any;
+  }): Promise<{
+    next: "CREATING_NEW" | "INITIAL_END" | "INITIAL_CONTINUE";
+    newPath: ObjectId | null;
+    newGen: string | null;
+  }> {
+    const material = await Material.findById(input.materialId);
+    if (!material) {
+      throw new Error("Material not found");
+    }
+
+    const answer = await this.prepareAnswer({
+      answer: input.answer,
+      material: material,
     });
 
-    if (!createdAnswer) {
-      throw new Error("Answer not inserted");
-    }
+    const ctx = await MaterialGenerationContext.create({
+      user: input.user,
+      material: material,
+      userAnswer: answer,
+    });
 
-    if (path.type === "INITIAL") {
-      // Check all materials answered
-      const unAnsweredMaterials = await Material.aggregate([
-        {
-          $match: {
-            path_ID: path._id,
-          },
-        },
-        {
-          $lookup: {
-            from: "user_answers",
-            localField: "_id",
-            foreignField: "material_ID",
-            as: "answers",
-          },
-        },
-        {
-          $match: {
-            $expr: {
-              $eq: [
-                {
-                  $size: "$answers",
-                },
-                0,
-              ],
-            },
-          },
-        },
-      ]);
+    await ctx.updateMaterial({
+      compStatus: "COMPLETED",
+    });
 
-      if (unAnsweredMaterials.length === 0) {
-        const user = await User.findById(path.user_ID);
-        if (!user) {
-          throw new Error("User not found");
-        }
-
-        const builder = await this.getPromptBuilder({
-          user: user,
-          journey: journey,
-          path: path,
-          answer: createdAnswer,
-        });
-
-        builder.userMessage(
-          "Only analyze the user's answers. don't create any new materials.",
-          {
-            extra: {
-              tags: [PromptTags.MATERIAL],
-            },
-          }
-        );
-
-        await this.generateMaterial(builder, {
-          journey: journey,
-          userPath: path,
-          answer: createdAnswer,
-          requiredMaterials: [],
-        });
-
-        const existingPath = await UserPath.findById(path._id);
-        if (!existingPath) {
-          throw new Error("Path not found");
-        }
-
-        const created = await UserPath.insertOne({
-          journey_ID: journey._id,
-          user_ID: path.user_ID,
-          type: "GENERAL",
-          isActive: true,
-          isMain: true,
-          progress: existingPath.progress,
-          name: "Daily",
-          lastStudyDate: Date.now(),
-          description: "Daily path",
-        });
-
-        if (!created) {
-          throw new Error("Path not created");
-        }
-
-        // Deactivate old path
-        await UserPath.findByIdAndUpdate(path._id, {
-          $set: {
-            isActive: false,
-            isMain: false,
-          },
-        });
-
-        await this.preparePath(journey, created);
-
-        return {
-          answer: createdAnswer,
-          next: "INITIAL_END",
-          newPath: created._id,
-        };
-      } else {
-        const user = await User.findById(path.user_ID);
-        if (!user) {
-          throw new Error("User not found");
-        }
-
-        const builder = await this.getPromptBuilder({
-          user: user,
-          journey: journey,
-          path: path,
-          answer: createdAnswer,
-        });
-
-        builder.assistantMessage(
-          "Only analyze the user's answers. don't create any new materials.",
-          {
-            extra: {
-              tags: [PromptTags.MATERIAL],
-            },
-          }
-        );
-
-        await this.generateMaterial(builder, {
-          journey: journey,
-          userPath: path,
-          answer: createdAnswer,
-          requiredMaterials: [],
-        });
-
-        return {
-          answer: createdAnswer,
-          next: "INITIAL_CONTINUE",
-          newPath: null,
-        };
-      }
+    if (ctx.path.type === "INITIAL") {
+      return await this.handleInitialAnswer({
+        existingPath: ctx.path,
+        journey: ctx.journey,
+        user: ctx.user,
+        answer: answer,
+        material: material,
+      });
     } else {
-      const user = await User.findById(path.user_ID);
-      if (!user) {
-        throw new Error("User not found");
-      }
+      ctx.generatingMaterial = {
+        type: material.details.type,
+        material: await this.createPreparingMaterial({
+          userId: ctx.user._id,
+          journeyId: ctx.journey._id,
+          pathId: ctx.path._id,
+        }),
+      };
 
-      const builder = await this.getPromptBuilder({
-        user: user,
-        journey: journey,
-        path: path,
-        answer: createdAnswer,
-      });
+      const gen = new NewMaterialGen(ctx, "material");
 
-      this.generateMaterial(builder, {
-        journey: journey,
-        userPath: path,
-        answer: createdAnswer,
-        requiredMaterials: [
-          {
-            type: material.details.type,
-            optional: false,
-            description: "Generate a new material. Only generate one material.",
-          },
-        ],
-      }).catch((err) => {
-        console.error("ERR", err);
-      });
+      gen.generate();
 
       return {
-        answer: createdAnswer,
         next: "CREATING_NEW",
         newPath: null,
+        newGen: ctx.generatingMaterial!.material._id.toHexString(),
       };
     }
   }

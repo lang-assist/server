@@ -1,10 +1,10 @@
-import OpenAI from "openai";
-import {
-  AIGeneratedDocumentation,
-  LinguisticUnitSet,
-  SupportedLocale,
-  VectorStores,
-} from "../../utils/types";
+import { AzureOpenAI } from "openai";
+
+import { getBearerTokenProvider } from "@azure/identity";
+
+import { AzureKeyCredential } from "@azure/core-auth";
+
+import { AIGeneratedDocumentation, SupportedLocale } from "../../utils/types";
 import { AIModel, AIUsage } from "./base";
 import { ObjectId } from "mongodb";
 import {
@@ -26,16 +26,16 @@ import {
   ParsedLinguisticUnitSet,
 } from "../../utils/ai-types";
 
-export class OpenAIModel extends AIModel {
+export class AzureOpenAIModel extends AIModel {
   constructor(
     public modelName: string,
-
     public apiKey: string,
     price: {
       input: number;
       output: number;
     },
-    public baseUrl?: string
+    public baseUrl: string,
+    public deployment: string
   ) {
     super({
       input: price.input,
@@ -48,20 +48,15 @@ export class OpenAIModel extends AIModel {
 
   name: string;
 
-  vectorStoreIds: {
-    [key in VectorStores]: string;
-  } = {
-    item_pictures: "vs_xLOouipT7gcihQg3r3r2zmgy",
-    voices: "vs_Tw1chqXDa9shGDhC8H4AlFE9",
-  };
-
-  _client?: OpenAI;
+  _client?: AzureOpenAI;
 
   get client() {
     if (!this._client) {
-      this._client = new OpenAI({
+      this._client = new AzureOpenAI({
         apiKey: this.apiKey,
-        baseURL: this.baseUrl,
+        deployment: this.deployment,
+        endpoint: this.baseUrl,
+        apiVersion: "2024-08-01-preview",
       });
     }
     return this._client;

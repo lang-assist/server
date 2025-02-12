@@ -1,7 +1,8 @@
-import OpenAI from "openai";
 import {
   AIGeneratedDocumentation,
+  aiGeneratedDocumentationSchema,
   LinguisticUnitSet,
+  linguisticUnitSetSchema,
   SupportedLocale,
   VectorStores,
 } from "../../utils/types";
@@ -13,6 +14,7 @@ import {
   IMaterial,
   IUserAnswer,
   Prompts,
+  Usage,
 } from "../../models/_index";
 import { PromptBuilder } from "ai-prompter";
 import { IUserPath } from "../../models/_index";
@@ -25,23 +27,19 @@ import {
   aiReviewResponseSchema,
   ParsedLinguisticUnitSet,
 } from "../../utils/ai-types";
+import { Anthropic } from "@anthropic-ai/sdk";
 
-export class OpenAIModel extends AIModel {
+export class ClaudeModel extends AIModel {
   constructor(
     public modelName: string,
-
     public apiKey: string,
-    price: {
-      input: number;
-      output: number;
-    },
     public baseUrl?: string
   ) {
     super({
-      input: price.input,
-      output: price.output,
-      cachedInput: 0,
-      cacheWrite: 0,
+      cachedInput: 0.3,
+      input: 3,
+      output: 15,
+      cacheWrite: 3.75,
     });
     this.name = modelName;
   }
@@ -55,13 +53,12 @@ export class OpenAIModel extends AIModel {
     voices: "vs_Tw1chqXDa9shGDhC8H4AlFE9",
   };
 
-  _client?: OpenAI;
+  _client?: Anthropic;
 
   get client() {
     if (!this._client) {
-      this._client = new OpenAI({
+      this._client = new Anthropic({
         apiKey: this.apiKey,
-        baseURL: this.baseUrl,
       });
     }
     return this._client;
@@ -83,10 +80,14 @@ export class OpenAIModel extends AIModel {
       answer_ID?: ObjectId;
     }
   ): Promise<{ res: any; usage: AIUsage }> {
-    const prompt = builder.build();
+    const { context, messages } = builder.buildForClaude();
 
     Prompts.insertOne({
-      messages: prompt,
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+      context,
       user_ID: args.userPath_ID,
       journey_ID: args.journey_ID,
       path_ID: args.userPath_ID,
@@ -94,61 +95,50 @@ export class OpenAIModel extends AIModel {
       purpose: "chat",
     });
 
-    const res = await this.client.chat.completions.create({
+    const res = await this.client.messages.create({
       model: this.name,
-      messages: prompt,
-      response_format: {
-        type: "json_schema",
-        json_schema: schema,
+      messages: messages,
+      system: context,
+      max_tokens: 8192,
+      tools: [
+        {
+          input_schema: schema.schema as any,
+          name: schema.name,
+          cache_control: {
+            type: "ephemeral",
+          },
+        },
+      ],
+      tool_choice: {
+        type: "tool",
+        name: schema.name,
       },
     });
 
-    if (res.choices.length === 0) {
+    if (res.content.length === 0) {
       throw new AIError("Failed to generate response", null, res);
     }
 
-    if (res.choices[0].message.refusal) {
-      throw new AIError("Failed to generate response", null, res);
-    }
-
-    const content = res.choices[0].message.content;
-
-    if (!content) {
-      throw new AIError("Failed to generate response", null, res);
-    }
-
-    try {
-      const parsed = JSON.parse(content);
-
-      Chatgpt_event.insertOne({
-        data: { res },
-      });
-
-      const usage = res.usage;
-
-      if (!usage) {
-        throw new AIError("Failed to get usage", null, res);
-      }
-
-      console.log("OpenAI Usage:", usage);
-
-      return {
-        res: parsed,
-        usage: {
-          input: usage.prompt_tokens,
-          output: usage.completion_tokens,
-          cachedInput: 0,
-          cacheWrite: 0,
-        },
-      };
-    } catch (e) {
+    if (res.content[0].type === "tool_use") {
+      const input = res.content[0].input as any;
       Chatgpt_event.insertOne({
         data: {
+          model: this.name,
           res,
-          error: e,
         },
       });
-      throw new AIError("Failed to parse response", null, e);
+      const usage = res.usage;
+      return {
+        res: input,
+        usage: {
+          input: usage.input_tokens,
+          output: usage.output_tokens,
+          cachedInput: usage.cache_read_input_tokens ?? 0,
+          cacheWrite: usage.cache_creation_input_tokens ?? 0,
+        },
+      };
+    } else {
+      throw new AIError("Failed to generate response", null, res);
     }
   }
 
@@ -223,63 +213,16 @@ export class OpenAIModel extends AIModel {
   async _resolveLinguisticUnits(
     builder: PromptBuilder
   ): Promise<{ res: ParsedLinguisticUnitSet; usage: AIUsage }> {
-    throw new Error("Not implemented");
-  }
+    const res = await this.runChat(
+      builder,
+      {
+        name: "LinguisticUnitSet",
+        schema: linguisticUnitSetSchema,
+      },
+      {}
+    );
 
-  /**
-   * Example message includes like:
-   *
-   * (TPM): Limit 30000, Used 5330, Requested 24915.   Please try again in 489ms. Visit https://platform.openai.com/account/rate-limits to learn more.
-   *
-   * Try again expression can be "5s", "1m", "1.548ms" , "1,548ms"
-   */
-  parseRateLimitError(message: string): {
-    limit: number;
-    requested: number;
-    tryAgainInMs: number;
-    type: "TPM" | "RPM";
-  } {
-    // Rate limit tipini belirle (TPM veya RPM)
-    const typeMatch = message.match(/\((TPM|RPM)\)/);
-    const type = (typeMatch?.[1] || "TPM") as "TPM" | "RPM";
-
-    // Limit ve kullanım sayılarını çıkart
-    const numbers =
-      message
-        .match(/\d+(?:,\d+)?/g)
-        ?.map((n) => parseInt(n.replace(",", ""))) || [];
-
-    // Zaman ifadesini çıkart
-    const timeMatch = message.match(/try again in ([\d,.]+\s*(?:ms|s|m))/i);
-    let tryAgainMs = 0;
-
-    if (timeMatch) {
-      const [value, unit] = timeMatch[1]
-        .toLowerCase()
-        .trim()
-        .match(/^([\d,.]+)\s*(ms|s|m)$/)!
-        .slice(1);
-      const numValue = parseFloat(value.replace(",", ""));
-
-      switch (unit) {
-        case "ms":
-          tryAgainMs = numValue;
-          break;
-        case "s":
-          tryAgainMs = numValue * 1000;
-          break;
-        case "m":
-          tryAgainMs = numValue * 60 * 1000;
-          break;
-      }
-    }
-
-    return {
-      type,
-      limit: numbers[0] || 0,
-      requested: numbers[2] || 0, // Used değerini atlayıp Requested değerini al
-      tryAgainInMs: Math.round(tryAgainMs),
-    };
+    return res;
   }
 
   async _storeItemPicture(picture: {
@@ -292,6 +235,15 @@ export class OpenAIModel extends AIModel {
   async _generateDocumentation(
     builder: PromptBuilder
   ): Promise<{ res: AIGeneratedDocumentation; usage: AIUsage }> {
-    throw new Error("Not implemented");
+    const res = await this.runChat(
+      builder,
+      {
+        name: "Documentation",
+        schema: aiGeneratedDocumentationSchema,
+      },
+      {}
+    );
+
+    return res;
   }
 }

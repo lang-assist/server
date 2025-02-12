@@ -7,8 +7,11 @@ export interface IModel extends CreatedAtField {
   journey_ID?: ObjectId;
   path_ID?: ObjectId;
   material_ID?: ObjectId;
-  messages: ChatMessage[];
-  context?: string;
+  messages: {
+    role: string;
+    content: string | any;
+  }[];
+  context?: any;
   purpose: string;
 }
 

@@ -3,6 +3,7 @@ import {
   ConversationDetails,
   MaterialDetails,
   MaterialMetadata,
+  MaterialType,
   PathLevel,
   PromptTags,
   QuizDetails,
@@ -20,8 +21,8 @@ import {
   Voices,
 } from "../models/_index";
 import { IMaterial } from "../models/_index";
-import { IConversation } from "microsoft-cognitiveservices-speech-sdk/distrib/lib/src/sdk/Transcription/IConversation";
 import { AIEmbeddingGenerator } from "./ai/base";
+import { MaterialGenerationContext } from "./material";
 
 export const supportedVoiceLocales = [
   "en_US",
@@ -129,6 +130,9 @@ function readInstruction(file: string) {
 export const instructions = {
   main: msg(readInstruction("main_instructions.md")),
   conversation: msg(readInstruction("conversation_assistant.md")),
+  ssml: msg(readInstruction("ssml.md")),
+  terms: msg(readInstruction("terms.md")),
+  documentation: msg(readInstruction("documentation.md")),
 };
 
 export function initialMaterialGenerationPrompt(
@@ -154,7 +158,7 @@ export function initialMaterialGenerationPrompt(
       `
 In itial test we need 2 materials:
 
-1. QUIZ: a quiz with only one TEXT_INPUT_WRITE question. 
+1. QUIZ: a quiz with only 2 questions: TEXT_INPUT_WRITE, RECORD. 
 
 2. CONVERSATION: A conversation material for medium level.
 
@@ -233,19 +237,42 @@ NOTE: Before we created a conversation for the user. Now we don't need it becaus
   }
 }
 
+export function summarizeMaterialMeta(
+  materialId: ObjectId | undefined,
+  type: MaterialType,
+  metadata: MaterialMetadata
+): string {
+  const message = msg();
+
+  if (materialId) {
+    message.addKv("ID", `${metadata.id} (${materialId.toString()})`);
+  } else {
+    message.addKv("ID", metadata.id);
+  }
+
+  message.addKv("Type", type);
+  message.addKv("Title", metadata.title);
+  message.addKv("Focus Areas", metadata.focusAreas.join(", "));
+  message.addKv("Focus Skills", metadata.focusSkills.join(", "));
+
+  return message.build();
+}
+
 export function summarizeMaterial(
   builder: PromptBuilder,
   material: {
+    _id?: ObjectId;
     details: MaterialDetails;
     metadata: MaterialMetadata;
   }
 ): void {
-  const message = msg();
-
-  message.addKv("Material ID", material.metadata.id);
-  message.addKv("Type", material.details.type);
-  message.addKv("Title", material.metadata.title);
-  message.addKv("Focus", material.metadata.focusAreas.join(", "));
+  const message = msg(
+    summarizeMaterialMeta(
+      material._id,
+      material.details.type,
+      material.metadata
+    )
+  );
 
   message.addKv("Details", (detailsMsg) => {
     switch (material.details.type) {
@@ -338,6 +365,7 @@ async function summarizeMaterialAndAnswers(
   answer: WithId<IUserAnswer>
 ): Promise<void> {
   summarizeMaterial(builder, {
+    _id: material._id,
     details: material.details,
     metadata: material.metadata,
   });
@@ -354,7 +382,7 @@ async function summarizeMaterialAndAnswers(
         };
 
         for (const [key, value] of Object.entries(answers)) {
-          detailsMsg.addKv(`"${key}"`, `${value}`);
+          detailsMsg.addKv(`"${key}"`, `${JSON.stringify(value)}`);
         }
 
         break;
@@ -375,13 +403,17 @@ async function summarizeMaterialAndAnswers(
           `Conversation completed with the following turns`,
           (turnsMsg) => {
             for (const turn of turns) {
-              turnsMsg.addKv(`- ${turn.character}`, turn.text);
-              if (turn.analyze) {
-                turnsMsg.addKv("Analysis", (analysisMsg) => {
-                  for (const [key, value] of Object.entries(turn.analyze!)) {
-                    analysisMsg.addKv(`${key}`, `${value}%`);
-                  }
+              if (turn.character === "$user" && turn.analyze) {
+                turnsMsg.addKv("- $user", (userMsg) => {
+                  userMsg.addKv("Transcription", turn.text);
+                  userMsg.addKv("Analysis", (analysisMsg) => {
+                    for (const [key, value] of Object.entries(turn.analyze!)) {
+                      analysisMsg.addKv(`${key}`, `${value}%`);
+                    }
+                  });
                 });
+              } else {
+                turnsMsg.addKv(`- ${turn.character}`, turn.text);
               }
             }
           }
@@ -396,6 +428,45 @@ async function summarizeMaterialAndAnswers(
     extra: {
       tags: [PromptTags.MATERIAL],
     },
+  });
+}
+
+export async function summarizeLast10Materials(
+  builder: PromptBuilder,
+  pathId: ObjectId
+) {
+  const materials = await Material.find(
+    {
+      path_ID: pathId,
+    },
+    {
+      sort: {
+        createdAt: -1,
+      },
+      limit: 10,
+    }
+  );
+
+  const message = msg();
+
+  message.addKv("Last 10 materials", (materialsMsg) => {
+    for (const material of materials) {
+      materialsMsg.addKv(
+        material._id.toString(),
+        summarizeMaterialMeta(
+          material._id,
+          material.details.type,
+          material.metadata
+        )
+      );
+    }
+  });
+
+  builder.assistantMessage(message, {
+    extra: {
+      tags: [PromptTags.MATERIAL],
+    },
+    cache: false,
   });
 }
 
@@ -414,24 +485,34 @@ export async function summarizeAnswer(
 
 function _userJourneyInstructions(
   builder: PromptBuilder,
-  journey: WithId<IJourney>
+  asSystem: boolean = true
 ) {
-  builder.systemMessage(
-    (journeyMsg) => {
-      journeyMsg.addKv("User name", "{{userName}}");
-      journeyMsg.addKv("Journey to learning", "{{language}}");
-    },
-    {
+  const message = msg();
+
+  message.addKv("User name", "{{userName}}");
+  message.addKv("Journey to learning", "{{language}}");
+
+  if (asSystem) {
+    builder.systemMessage(message, {
       extra: {
         tags: [PromptTags.JOURNEY],
       },
-    }
-  );
+      cache: true,
+    });
+  } else {
+    builder.assistantMessage(message, {
+      extra: {
+        tags: [PromptTags.JOURNEY],
+      },
+      cache: true,
+    });
+  }
 }
 
 function _userCurrentStateInstructions(
   builder: PromptBuilder,
-  userPath: WithId<IUserPath>
+  userPath: WithId<IUserPath>,
+  asSystem: boolean = true
 ): void {
   const message = msg();
 
@@ -489,59 +570,68 @@ function _userCurrentStateInstructions(
     }
   }
 
-  builder.systemMessage(message, {
-    extra: {
-      tags: [PromptTags.PATH],
-    },
-  });
+  if (asSystem) {
+    builder.systemMessage(message, {
+      extra: {
+        tags: [PromptTags.PATH],
+      },
+      cache: false,
+    });
+  } else {
+    builder.assistantMessage(message, {
+      extra: {
+        tags: [PromptTags.PATH],
+      },
+      cache: false,
+    });
+  }
 }
 
 export async function materialGenInstructions(
+  ctx: MaterialGenerationContext,
   builder: PromptBuilder,
-  args: {
-    journey: WithId<IJourney>;
-    userPath: WithId<IUserPath>;
-    answer?: WithId<IUserAnswer> | null;
-  }
+  initialLevel?: 1 | 2 | 3,
+  existingInitMaterials?: WithId<IMaterial>[]
 ): Promise<void> {
   builder.systemMessage(instructions.main, {
     extra: {
       tags: [PromptTags.MAIN],
     },
+    cache: true,
   });
 
-  _userJourneyInstructions(builder, args.journey);
+  // builder.systemMessage(instructions.ssml, {
+  //   extra: {
+  //     tags: [PromptTags.MAIN],
+  //   },
+  //   cache: true,
+  // });
 
-  _userCurrentStateInstructions(builder, args.userPath);
+  // const voicesMsg = await DocumentationManager.getTenVoiceMessage(
+  //   args.journey.to
+  // );
 
-  if (args.answer) {
-    await summarizeAnswer(builder, args.answer);
+  // builder.assistantMessage(voicesMsg, {
+  //   extra: {
+  //     tags: [PromptTags.MAIN],
+  //   },
+  //   cache: false,
+  // });
+
+  _userJourneyInstructions(builder);
+
+  _userCurrentStateInstructions(builder, ctx.path);
+
+  await summarizeLast10Materials(builder, ctx.path._id);
+
+  if (ctx.userAnswer) {
+    await summarizeAnswer(builder, ctx.userAnswer);
   }
 }
 
-export async function conversationGenInstructions(
-  builder: PromptBuilder,
-  args: {
-    conversation: WithId<IMaterial>;
-    userPath: WithId<IUserPath>;
-    journey: WithId<IJourney>;
-  }
-) {
-  builder.systemMessage(instructions.conversation, {
-    extra: {
-      tags: [PromptTags.MAIN],
-    },
-  });
-
-  _userJourneyInstructions(builder, args.journey);
-
-  _userCurrentStateInstructions(builder, args.userPath);
-
-  summarizeMaterial(builder, {
-    details: args.conversation.details,
-    metadata: args.conversation.metadata,
-  });
-
+export async function conversationCharactersInstructions(args: {
+  conversation: WithId<IMaterial>;
+}): Promise<MessageBuilder> {
   const conversationCharacters = (
     args.conversation.details as ConversationDetails
   ).characters;
@@ -581,23 +671,66 @@ export async function conversationGenInstructions(
     [key: string]: MessageBuilder;
   } = Object.assign({}, ...charactersInstructionsResult);
 
-  builder.assistantMessage(
-    (conversationMsg) => {
-      conversationMsg.addKv(
-        "We select voices for conversation characters:",
-        (detailsMsg) => {
-          for (const [key, value] of Object.entries(charactersInstructions)) {
-            detailsMsg.addKv(`${key}`, value);
-          }
-        }
-      );
-    },
-    {
-      extra: {
-        tags: [PromptTags.MATERIAL],
-      },
+  const conversationMsg = msg();
+
+  conversationMsg.addKv(
+    "We select voices for conversation characters:",
+    (detailsMsg) => {
+      for (const [key, value] of Object.entries(charactersInstructions)) {
+        detailsMsg.addKv(`${key}`, value);
+      }
     }
   );
+
+  return conversationMsg;
+}
+
+export function conversationGenInstructions(
+  builder: PromptBuilder,
+  args: {
+    conversation: WithId<IMaterial>;
+    userPath: WithId<IUserPath>;
+    journey: WithId<IJourney>;
+    charactersMsg: MessageBuilder;
+  }
+) {
+  builder.systemMessage(instructions.conversation, {
+    extra: {
+      tags: [PromptTags.MAIN],
+    },
+    cache: true,
+  });
+
+  builder.systemMessage(instructions.ssml, {
+    extra: {
+      tags: [PromptTags.MAIN],
+    },
+    cache: true,
+  });
+
+  _userJourneyInstructions(builder, false);
+
+  _userCurrentStateInstructions(builder, args.userPath, false);
+
+  summarizeMaterial(builder, {
+    details: args.conversation.details,
+    metadata: args.conversation.metadata,
+  });
+
+  builder.assistantMessage(args.charactersMsg, {
+    extra: {
+      tags: [PromptTags.MATERIAL],
+    },
+  });
+}
+
+export function linguisticUnitSetInstructions(builder: PromptBuilder) {
+  builder.systemMessage(instructions.terms, {
+    extra: {
+      tags: [PromptTags.MAIN],
+    },
+    cache: true,
+  });
 }
 
 //   return `

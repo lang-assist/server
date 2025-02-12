@@ -4,7 +4,7 @@ import { SupportedLocale } from "../utils/types";
 
 interface IModel {
   locale: SupportedLocale;
-  materials: AIGeneratedMaterialResponse[];
+  materials: AIGeneratedMaterialResponse[]; // material template ids
   aiModel: string;
   level: 3 | 2 | 1;
 }

@@ -1,9 +1,9 @@
 import { CreatedAtField, DbHelper } from "../helpers/db";
-import { TermSet } from "../utils/types";
+import { LinguisticUnitSet } from "../utils/types";
 
 interface IModel extends CreatedAtField {
   hash: string;
-  data: TermSet;
+  data: LinguisticUnitSet;
   resolvedBy: string;
 }
 

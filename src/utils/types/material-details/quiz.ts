@@ -99,9 +99,6 @@ export const questionItemSchema = {
     picturePrompt: {
       type: "string",
     },
-    pictureID: {
-      type: "string",
-    },
   },
   required: ["id", "text"],
   additionalProperties: false,
@@ -159,29 +156,33 @@ export function quizQuestionSchema(type: QuizQuestionType) {
   };
 }
 
+export const quizQuestionsSchema = {
+  oneOf: [
+    quizQuestionSchema("MULTIPLE_CHOICE"),
+    quizQuestionSchema("CHOICE"),
+    quizQuestionSchema("TRUE_FALSE"),
+    quizQuestionSchema("FILL_CHOICE"),
+    quizQuestionSchema("FILL_WRITE"),
+    quizQuestionSchema("MATCHING"),
+    quizQuestionSchema("ORDERING"),
+    quizQuestionSchema("TEXT_INPUT_WRITE"),
+    quizQuestionSchema("RECORD"),
+  ],
+};
+
+
 export const quizDetailsSchema = {
   type: "object",
   properties: {
     questions: {
       type: "array",
       items: {
-        oneOf: [
-          quizQuestionSchema("MULTIPLE_CHOICE"),
-          quizQuestionSchema("CHOICE"),
-          quizQuestionSchema("TRUE_FALSE"),
-          quizQuestionSchema("FILL_CHOICE"),
-          quizQuestionSchema("FILL_WRITE"),
-          quizQuestionSchema("MATCHING"),
-          quizQuestionSchema("ORDERING"),
-          quizQuestionSchema("TEXT_INPUT_WRITE"),
-        ],
+        $ref: "#/definitions/QuizQuestion",
       },
     },
     preludes: {
       type: "array",
       items: quizPreludeSchema,
-      description:
-        "If more than one question requires a preliminary information, the preliminary information should be included here. For example, a story is told and 3 questions are asked in this context. The questions also reference the prelude with the prelude id. If multiple questions are not in one context, there is no need for a prelude.",
     },
   },
   required: ["questions"],

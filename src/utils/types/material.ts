@@ -5,24 +5,16 @@ import {
   materialDetailsRefs,
   storyDetailsSchema,
   questionItemSchema,
+  quizQuestionsSchema,
 } from "./material-details";
 import { metadataSchema } from "./metadata";
-
-export type MaterialStatus =
-  | "PENDING"
-  | "IN_PROGRESS"
-  | "WAITING_FOR_APPROVAL"
-  | "WAITING_FOR_REVIEW"
-  | "REJECTED"
-  | "APPROVED"
-  | "COMPLETED"
-  | "PREPARING";
 
 export const materialDetailsDefs = {
   StoryDetails: _withType(storyDetailsSchema, "STORY"),
   QuizDetails: _withType(quizDetailsSchema, "QUIZ"),
   ConversationDetails: _withType(conversationDetailsSchema, "CONVERSATION"),
   QuestionItem: questionItemSchema,
+  QuizQuestion: quizQuestionsSchema,
 };
 
 function _withType(schema: any, type: MaterialType) {

@@ -6,9 +6,7 @@ import {
   IUser,
   Journey,
   Material,
-  User,
   UserPath,
-  Voices,
 } from "../models/_index";
 import { AIEmbeddingGenerator, AIModel } from "./ai/base";
 import { ConversationDetails, PromptTags } from "../utils/types";
@@ -16,8 +14,11 @@ import { StorageService } from "./storage";
 import { AzureVoice } from "./voice/azure";
 import { AIConversationTurnResponse } from "../utils/ai-types";
 import { AudioHelper } from "./audio";
-import { PromptBuilder } from "ai-prompter";
-import { conversationGenInstructions } from "./prompts";
+import { msg, PromptBuilder } from "ai-prompter";
+import {
+  conversationCharactersInstructions,
+  conversationGenInstructions,
+} from "./prompts";
 
 export class ConversationManager {
   private static _preparingConversations: {
@@ -39,22 +40,10 @@ export class ConversationManager {
       throw new Error("Material not found");
     }
 
-    if (material.preparing === false || material.preparing === true) {
-      return material;
-    }
+    console.log("PREPARING Conversation", material);
 
     const promise = (async () => {
-      await Material.findByIdAndUpdate(materialId, {
-        $set: {
-          preparing: true,
-        },
-      });
-
-      let conversation = await Material.findById(materialId);
-
-      if (!conversation) {
-        throw new Error("Conversation not found");
-      }
+      let conversation: WithId<IMaterial> | null = material;
 
       const journey = await Journey.findById(conversation.journey_ID);
 
@@ -83,12 +72,19 @@ export class ConversationManager {
         throw new Error("Conversation not found");
       }
 
+      console.log("Conversation updated", conversation);
+
       const builder = new PromptBuilder({
         userName: user.name,
         language: journey.to,
       });
 
-      await conversationGenInstructions(builder, {
+      const charactersMsg = await conversationCharactersInstructions({
+        conversation: conversation,
+      });
+
+      conversationGenInstructions(builder, {
+        charactersMsg,
         journey: journey,
         userPath: userPath,
         conversation: conversation,
@@ -120,23 +116,17 @@ export class ConversationManager {
           builder,
           conversation,
           journey,
-          nextTurn,
-          undefined
+          nextTurn
         );
 
         nextTurn = (
           await this._createTurnForAI({
             materialId: conversation._id,
             res: createRes,
+            language: journey.to,
           })
         ).nextTurn;
       } while (nextTurn !== null && nextTurn !== "$user");
-
-      await Material.findByIdAndUpdate(conversation._id, {
-        $set: {
-          preparing: false,
-        },
-      });
 
       return conversation;
     })();
@@ -153,6 +143,7 @@ export class ConversationManager {
   private static async _createTurnForAI(args: {
     materialId: ObjectId;
     res: AIConversationTurnResponse;
+    language: string;
   }): Promise<{
     turn: WithId<IConversationTurn>;
     nextTurn: string | null;
@@ -178,6 +169,7 @@ export class ConversationManager {
       audioId: speak,
       ssml: turn.ssml,
       turnId: turnId,
+      language: args.language,
     }).catch((e) => {
       console.error("SPEAK ERROR", e);
     });
@@ -270,12 +262,6 @@ export class ConversationManager {
       },
     });
 
-    if (material.preparing === undefined || material.preparing === null) {
-      this.prepareConversation(input.materialId, input.user).then((v) => {
-        material = v;
-      });
-    }
-
     if (this._preparingConversations[id]) {
       this._preparingConversations[id].then((v) => {
         material = v;
@@ -284,30 +270,68 @@ export class ConversationManager {
 
     new Promise(async (resolve, reject) => {
       try {
-        const builder = new PromptBuilder();
-
-        await conversationGenInstructions(builder, {
-          journey: journey,
-          userPath: userPath,
+        const charactersMsg = await conversationCharactersInstructions({
           conversation: material!,
         });
 
         for await (const userTurn of inputStream) {
+          const builder = new PromptBuilder({
+            userName: input.user.name,
+            language: journey.to,
+          });
+
           let nextTurn: string | null = null;
+
+          conversationGenInstructions(builder, {
+            charactersMsg,
+            journey: journey,
+            userPath: userPath,
+            conversation: material!,
+          });
+
+          const turns = await ConversationTurn.find(
+            {
+              material_ID: input.materialId,
+            },
+            {
+              sort: {
+                createdAt: 1,
+              },
+            }
+          );
+
+          for (const turn of turns) {
+            const message = msg();
+            message.addKv(turn.character, turn.text);
+
+            if (turn.character === "$user") {
+              builder.userMessage(message, {
+                extra: {
+                  tags: [PromptTags.TURNS],
+                },
+              });
+            } else {
+              builder.assistantMessage(message, {
+                extra: {
+                  tags: [PromptTags.TURNS],
+                },
+              });
+            }
+          }
 
           in_while: do {
             const createdRes = await AIModel.generateConversationTurn(
               builder,
               material!,
               journey,
-              nextTurn,
-              userTurn
+              nextTurn
             );
 
             nextTurn = (
               await this._createTurnForAI({
                 materialId: input.materialId,
                 res: createdRes,
+                language: journey.to,
               })
             ).nextTurn;
 

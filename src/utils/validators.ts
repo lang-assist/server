@@ -16,3 +16,12 @@ export function validatePhoneNumber(phoneNumber: string) {
 export function validateColor(color: string) {
   return color.match(/^[0-9]{1,3},[0-9]{1,3},[0-9]{1,3}$/);
 }
+
+export function undefinedOrValue<T>(value: T, fallback: T): T {
+  if (considerAsNull.includes(value as any)) {
+    return fallback;
+  }
+  return value;
+}
+
+const considerAsNull = ["null", "undefined", "NULL", null, undefined];

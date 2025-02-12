@@ -1,125 +1,94 @@
-export type TermType =
-  | "NOUN"
-  | "VERB"
-  | "ADJECTIVE"
-  | "ADVERB"
-  | "PRONOUN"
-  | "PREPOSITION"
-  | "CONJUNCTION"
-  | "INTERJECTION"
-  | "PUNCTUATION"
-  | "IDIOM"
-  | "SPECIAL"
-  | "BLANK"
-  | "NAME"
-  | "NUMBER"
-  | "PHRASE"
-  | "WHITESPACE"
-  | "OTHER"
-  | string;
-
-export interface Term {
-  expr: string;
-  root?: string;
-  variant?: string;
-  type: TermType;
-  subTerms?: Term[];
-  blankLength?: number;
+export interface UnitProps {
+  key: string;
+  value?: string;
+  dict?: boolean;
+  doc?: {
+    title?: string;
+    search?: string;
+  };
 }
 
-export type TermSet = Term[];
+export interface LinguisticUnit {
+  text: string;
+  props: UnitProps[];
+  subUnits?: LinguisticUnit[];
+}
 
-const termSchema = {
+export type LinguisticUnitSet = LinguisticUnit[];
+
+export const unitPropsRef = {
+  $ref: "#/definitions/UnitProps",
+};
+
+const unitPropsSchema = {
   type: "object",
   properties: {
-    expr: { type: "string", description: "Expression in string format." },
-    root: {
-      type: "string",
-      description:
-        "If the expression is a word and has a root, it will be stored here. Also, if the expression is a compound term, idiom, etc. literal meaning will be stored here. Otherwise, it will be undefined.",
+    key: { type: "string", description: "Key of the property." },
+    value: { type: "string", description: "Value of the property." },
+    dict: {
+      type: "boolean",
+      description: "If the property is a dictionary item ref.",
     },
-    type: {
-      type: "string",
-      description:
-        "Type of the term. Blank used for fill blank questions. Special used for special characters. Name used for names like John, Jane, etc.",
-    },
-    variant: {
-      type: "string",
-      description:
-        "If the expression is a compound term, idiom, etc. variant will be stored here. Otherwise, it will be undefined.",
-    },
-    subTerms: {
-      type: "array",
-      items: { $ref: "#/definitions/Term" },
-      description: "If the term is a compound term, it will have sub terms.",
-    },
-    blankLength: {
-      type: "number",
-      description: "If the term is a blank, it will have a length.",
+    doc: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Title of the documentation item.",
+        },
+        search: {
+          type: "string",
+          description: "Search of the documentation item.",
+        },
+      },
+      description: "If the property is a documentation item ref.",
     },
   },
-  required: ["value", "type"],
   additionalProperties: false,
-  examples: [
-    {
-      value: "the cat",
-      type: "NOUN",
-      subTerms: [
-        {
-          expr: "the",
-          type: "PREPOSITION",
-        },
-        {
-          expr: "cat",
-          type: "NOUN",
-        },
-      ],
+};
+
+const linguisticUnitSchema = {
+  type: "object",
+  properties: {
+    text: { type: "string", description: "Value in string format." },
+    props: {
+      type: "array",
+      items: unitPropsRef,
+      description: "Properties of the unit.",
     },
-    {
-      value: "went",
-      type: "VERB",
-      root: "go",
-      subTerms: [],
+    subUnits: {
+      type: "array",
+      items: { $ref: "#/definitions/LinguisticUnit" },
+      description:
+        "If the unit is a compound term, idiom, etc. it will have sub units.",
     },
-    {
-      value: "Give me a hand",
-      type: "IDIOM",
-      subTerms: [
-        {
-          value: "Give",
-          type: "VERB",
-        },
-        {
-          value: "me",
-          type: "PRONOUN",
-        },
-        {
-          value: "a",
-          type: "ADJECTIVE",
-        },
-        {
-          value: "hand",
-          type: "NOUN",
-        },
-      ],
+  },
+  required: ["text"],
+  additionalProperties: false,
+};
+
+export const linguisticUnitRef = {
+  $ref: "#/definitions/LinguisticUnit",
+};
+
+export const linguisticUnitDefinitions = {
+  UnitProps: unitPropsSchema,
+  LinguisticUnit: linguisticUnitSchema,
+};
+
+export const linguisticUnitSetSchema = {
+  type: "object",
+  name: "LinguisticUnitSet",
+  definitions: {
+    ...linguisticUnitDefinitions,
+  },
+  properties: {
+    result: {
+      type: "array",
+      items: linguisticUnitRef,
+      description: "The result of the parsing.",
     },
-  ],
-};
-
-const termSetSchema = {
-  type: "array",
-  items: { $ref: "#/definitions/Term" },
-};
-
-export const termDefinitions = {
-  Term: termSchema,
-  TermSet: termSetSchema,
-};
-
-export const termSetRef = {
-  $ref: "#/definitions/TermSet",
-};
-
-export const termRef = {
-  $ref: "#/definitions/Term",
+  },
+  required: ["result"],
+  additionalProperties: false,
 };

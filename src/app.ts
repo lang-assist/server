@@ -20,7 +20,15 @@ import fs from "fs";
 import { expressMiddleware } from "@apollo/server/express4";
 import { berberEnv, init } from "./init";
 import { createHash } from "crypto";
-import { typesMapping } from "./utils/types";
+import { ApolloServerPluginDrainHttpServer } from "@apollo/server/plugin/drainHttpServer";
+import { WebSocketServer } from "ws";
+import { useServer } from "graphql-ws/lib/use/ws";
+import { AppContext } from "./utils/types";
+import { withAuthGQL } from "./middleware/with_auth";
+import { AzureVoice } from "./helpers/voice/azure";
+import { Terms } from "./models/_index";
+import { AIEmbeddingGenerator, AIImageGenerator } from "./helpers/ai/base";
+import { StorageService } from "./helpers/storage";
 
 function loadSchema(): string[] {
   const dir = path.join(__dirname, "../../../lib/gql/schema");
@@ -43,9 +51,9 @@ const defaultResolvers = {
       return JSON.parse(value);
     },
   }),
-  Term: new GraphQLScalarType({
-    name: "Term",
-    description: "Term custom scalar type",
+  LinguisticUnit: new GraphQLScalarType({
+    name: "LinguisticUnit",
+    description: "LinguisticUnit custom scalar type",
     serialize(value: any) {
       return JSON.stringify(value);
     },
@@ -53,18 +61,14 @@ const defaultResolvers = {
       return JSON.parse(value);
     },
   }),
-  TermSet: new GraphQLScalarType({
-    name: "TermSet",
-    description: "TermSet custom scalar type",
+  LinguisticUnitSet: new GraphQLScalarType({
+    name: "LinguisticUnitSet",
+    description: "LinguisticUnitSet custom scalar type",
     async serialize(value: any) {
-      const md5Hash = createHash("md5")
-        .update(JSON.stringify(value))
-        .digest("hex");
-      const term = await Terms.findOne({ hash: md5Hash });
-      if (!term) {
+      if (typeof value !== "string") {
         return JSON.stringify(value);
       }
-      return JSON.stringify(term.data);
+      return TermManager.get(value);
     },
     parseValue(value: any) {
       return JSON.parse(value);
@@ -246,7 +250,15 @@ import {
 } from "./resolvers/user";
 import { RoleHelper } from "./helpers/role";
 import { AIModel } from "./helpers/ai";
-import { OpenAIEmbeddingGenerator, OpenAIModel } from "./helpers/ai/chatgpt";
+import {
+  OpenAIEmbeddingGenerator,
+  OpenAIModelAssistant,
+} from "./helpers/ai/chatgpt-assistant";
+import { OpenAIModel } from "./helpers/ai/chatgpt";
+import { ClaudeModel } from "./helpers/ai/claude";
+import { FalImageGenerator } from "./helpers/ai/fal-img";
+import { TermManager } from "./helpers/term";
+import { AzureOpenAIModel } from "./helpers/ai/azure-chatgpt";
 function listen() {
   if (berberEnv.ENV !== "local") {
     return;
@@ -322,18 +334,6 @@ const resolvers = {
     }),
   },
 };
-
-import { ApolloServerPluginDrainHttpServer } from "@apollo/server/plugin/drainHttpServer";
-import { WebSocketServer } from "ws";
-import { useServer } from "graphql-ws/lib/use/ws";
-import { AppContext } from "./utils/types";
-import { withAuthGQL } from "./middleware/with_auth";
-import { AzureVoice } from "./helpers/voice/azure";
-import { Terms } from "./models/_index";
-import { AIEmbeddingGenerator, AIImageGenerator } from "./helpers/ai/base";
-import { FakeImageGenerator } from "./helpers/ai/fake_img";
-import { StorageService } from "./helpers/storage";
-import { mainInstructions } from "./prompts/main";
 
 init(
   berberEnv.SERVER_PORT,
@@ -456,12 +456,59 @@ init(
 ).then(async () => {
   await RoleHelper.checkAndCreatePredefinedRoles();
   await AIModel.init({
-    "gpt-4o": new OpenAIModel("gpt-4o"),
-    "gpt-4o-mini": new OpenAIModel("gpt-4o-mini"),
+    "gpt-4o-assistant": new OpenAIModelAssistant("gpt-4o", {
+      input: 2.5,
+      output: 10,
+    }),
+    "gpt-4o-mini-assistant": new OpenAIModelAssistant("gpt-4o-mini", {
+      input: 0.15,
+      output: 0.6,
+    }),
+    "gpt-4o": new AzureOpenAIModel(
+      "gpt-4o",
+      process.env.AZURE_AI_KEY!,
+      {
+        input: 2.5,
+        output: 10,
+      },
+      "https://broca-oai418024195739.cognitiveservices.azure.com/",
+      "gpt-4o"
+    ),
+    "gpt-o1": new OpenAIModel("o1", process.env.OPENAI_API_KEY!, {
+      input: 15,
+      output: 60,
+    }),
+
+    "gpt-o1-mini": new OpenAIModel("o1-mini", process.env.OPENAI_API_KEY!, {
+      input: 3,
+      output: 12,
+    }),
+    "claude-sonnet": new ClaudeModel(
+      "claude-3-5-sonnet-20241022",
+      process.env.ANTHROPIC_API_KEY!
+    ),
+    "deepseek-chat": new OpenAIModel(
+      "deepseek-chat",
+      process.env.DEEPSEEK_API_KEY!,
+      {
+        input: 0.0001,
+        output: 0.0004,
+      }
+    ),
+    "DeepSeek-R1": new AzureOpenAIModel(
+      "DeepSeek-R1",
+      process.env.AZURE_AI_KEY!,
+      {
+        input: 0.0001,
+        output: 0.0004,
+      },
+      "https://broca-ai-srv.cognitiveservices.azure.com",
+      "DeepSeek-R1"
+    ),
   });
   await AzureVoice.init();
   await AIImageGenerator.init({
-    fake_img: new FakeImageGenerator(),
+    "fal-ai/flux/schnell": new FalImageGenerator("fal-ai/flux/schnell"),
   });
   await AIEmbeddingGenerator.init({
     "text-embedding-3-large": new OpenAIEmbeddingGenerator(
@@ -471,8 +518,6 @@ init(
       "text-embedding-3-small"
     ),
   });
-
-  console.log(mainInstructions.build());
 
   // await AIEmbeddingGenerator.deleteVoiceEmbeddings();
   // await AIEmbeddingGenerator.deleteIndex();

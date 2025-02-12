@@ -1,16 +1,17 @@
 import { ObjectId } from "mongodb";
 import { DbHelper, TimeFields } from "../helpers/db";
-import { AIModel } from "../helpers/ai";
-import { SupportedLocale } from "../utils/types";
+import { SupportedLanguage } from "../utils/types";
 
 interface IModel extends TimeFields {
   user_ID: ObjectId;
-  to: SupportedLocale;
+  to: SupportedLanguage;
   name: string;
   lastStudyDate?: number;
   avatar: string;
   status: "active" | "completed" | "paused";
   aiModel: string;
+  embeddingModel: string;
+  imageGenModel: string;
   assistantId?: string;
   assistantHash?: string;
 }

@@ -1,11 +1,15 @@
-import { ValidationError } from "jsonschema";
+import { Schema, ValidationError } from "jsonschema";
 import {
+  LinguisticUnit,
   MaterialDetails,
   materialDetailsDefs,
   MaterialMetadata,
   materialSchema,
+  MaterialType,
   PathLevel,
   pathLevelSchema,
+  questionItemSchema,
+  quizQuestionSchema,
 } from "./types";
 
 export type AIModels = "gpt-4o" | "gpt-4o-mini";
@@ -51,7 +55,9 @@ export interface AIObservationEdit {
 }
 
 export interface AIGenerationResponse {
-  newMaterials?: AIGeneratedMaterialResponse[];
+  newMaterials?: {
+    [key in MaterialType]?: AIGeneratedMaterialResponse;
+  };
   newLevel?: PathLevel;
   observations?: AIObservationEdit;
   weakPoints?: AIObservationEdit;
@@ -59,6 +65,13 @@ export interface AIGenerationResponse {
   feedbacks?: AIFeedbackInterface[];
   // newDictionaryItems?: DictionaryItem[];
 }
+
+export type MsgGenerationType =
+  | "material"
+  | "conversationTurn"
+  | "linguisticUnits"
+  | "documentation"
+  | "speechStory";
 
 export interface AIFeedbackInterface {
   type:
@@ -129,12 +142,34 @@ export const aiFeedbackSchema = {
 
 export function aiReviewResponseSchema(
   required: ("newMaterials" | "observations" | "weakPoints" | "strongPoints")[]
-) {
+): Schema {
   return {
-    name: "AIGenerationResponse",
     type: "object",
     definitions: {
       ...materialDetailsDefs,
+      QUIZ: {
+        type: "object",
+        properties: {
+          details: { $ref: "#/definitions/QuizDetails" },
+          metadata: { $ref: "#/definitions/MaterialMetadata" },
+        },
+        additionalProperties: false,
+        required: ["details", "metadata"],
+      },
+      STORY: {
+        type: "object",
+        properties: {
+          details: { $ref: "#/definitions/StoryDetails" },
+          metadata: { $ref: "#/definitions/MaterialMetadata" },
+        },
+      },
+      CONVERSATION: {
+        type: "object",
+        properties: {
+          details: { $ref: "#/definitions/ConversationDetails" },
+          metadata: { $ref: "#/definitions/MaterialMetadata" },
+        },
+      },
       Material: materialSchema,
       Edit: aiObservationEditSchema,
       PathLevel: pathLevelSchema,
@@ -142,11 +177,14 @@ export function aiReviewResponseSchema(
     },
     properties: {
       newMaterials: {
-        type: "array",
+        type: "object",
         description: "New materials to add to the user's learning",
-        items: {
-          $ref: "#/definitions/Material",
+        properties: {
+          QUIZ: { $ref: "#/definitions/QUIZ" },
+          STORY: { $ref: "#/definitions/STORY" },
+          CONVERSATION: { $ref: "#/definitions/CONVERSATION" },
         },
+        additionalProperties: false,
       },
       newLevel: {
         oneOf: [{ $ref: "#/definitions/PathLevel" }, { type: "null" }],
@@ -290,4 +328,13 @@ export class AIRateLimitError extends AIError {
       tryAgainAt: this.tryAgainAt,
     };
   }
+}
+
+export type ParsedLinguisticUnitSet = {
+  result: LinguisticUnit[];
+};
+
+export interface AISpeechStory {
+  story: string;
+  ssml: string;
 }

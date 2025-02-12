@@ -5,14 +5,28 @@ interface IModel {
   user_ID: ObjectId;
   journey_ID: ObjectId;
   path_ID: ObjectId;
-  usage: any;
-  [key: string]: any;
+  material_ID: ObjectId;
+  usage: {
+    input: number;
+    output: number;
+    cachedInput: number;
+    cacheWrite?: number;
+  };
+  costs: {
+    input: number;
+    output: number;
+    cachedInput: number;
+    cacheWrite?: number;
+  };
+  total: number;
+  withOneDollar: number;
+  purpose: string;
 }
 
 const Model = DbHelper.model<IModel>({
   collectionName: "usages",
   cacheById: false,
-  idFields: ["user_ID", "journey_ID", "path_ID"],
+  idFields: ["user_ID", "journey_ID", "path_ID", "material_ID"],
 });
 
 export { Model, IModel };

@@ -6,11 +6,12 @@ export interface IModel extends CreatedAtField {
   material_ID: ObjectId;
   user_ID: ObjectId;
   feedback: AIFeedbackInterface;
+  seen: boolean;
 }
 
 export const Model = DbHelper.model<IModel>({
   collectionName: "ai-feedback",
   createdAtField: true,
   idFields: ["material_ID", "user_ID"],
-  indexes: [{ key: { material_ID: 1 } }, { key: { user_ID: 1 } }],
+  indexes: [{ key: { material_ID: 1, seen: 1 } }],
 });

@@ -26,14 +26,14 @@ export class PictureHelper {
       });
 
       try {
-        const buffer = await AIImageGenerator.generateItemPicture({
+        const imgRes = await AIImageGenerator.generateItemPicture({
           prompt: args.prompt,
-          model: "fake_img",
+          model: "fal-ai/flux/schnell",
         });
 
         await StorageService.uploadItemPicture({
-          buffer,
-          mimeType: "image/png",
+          buffer: imgRes.data,
+          mimeType: imgRes.contentType,
           prompt: args.prompt,
           id: args.itemId,
         });
