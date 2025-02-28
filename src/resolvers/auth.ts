@@ -100,7 +100,7 @@ async function internal_register_email_phone(args: {
 
   const { secret, hashedPwd } = createPwd(args.password);
 
-  const dbClient = mongoClient("market");
+  const dbClient = mongoClient("main");
   const createdDocs: {
     [key: string]: WithId<any>;
   } = [];

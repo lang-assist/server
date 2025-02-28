@@ -7,6 +7,7 @@ export const berberEnv = ((): {
   ENV: "prod" | "dev" | "local";
 
   MONGO_URL: string;
+  MONGO_VECTOR_URL: string;
 
   REDIS_HOST: string;
   REDIS_PORT: number;
@@ -36,7 +37,7 @@ export const berberEnv = ((): {
       SERVER_URL: "",
 
       MONGO_URL: "",
-
+      MONGO_VECTOR_URL: "",
       REDIS_HOST: "",
       REDIS_PORT: 0,
       REDIS_PASSWORD: "",
@@ -100,6 +101,7 @@ export const berberEnv = ((): {
     SERVER_URL: env.SERVER_URL ?? "",
 
     MONGO_URL: env.MONGO_URL ?? "",
+    MONGO_VECTOR_URL: env.MONGO_VECTOR_URL ?? "",
 
     REDIS_HOST: env.REDIS_HOST ?? "",
     REDIS_PORT: parseInt(env.REDIS_PORT ?? "0"),

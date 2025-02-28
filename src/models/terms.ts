@@ -1,14 +1,15 @@
 import { CreatedAtField, DbHelper } from "../helpers/db";
-import { LinguisticUnitSet } from "../utils/types";
+import { COLLECTIONS } from "../utils/constants";
+import { BrocaTypes } from "../types";
 
 interface IModel extends CreatedAtField {
   hash: string;
-  data: LinguisticUnitSet;
+  data: BrocaTypes.LinguisticUnits.LinguisticUnitSet;
   resolvedBy: string;
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "terms",
+  collectionName: COLLECTIONS.TERMS,
   cacheById: false,
   queryCacheFields: ["hash"],
   indexes: [

@@ -1,23 +1,33 @@
 import { ObjectId } from "mongodb";
 import { DbHelper, TimeFields } from "../helpers/db";
-import { SupportedLanguage } from "../utils/types";
+import { BrocaTypes } from "../types";
+import { COLLECTIONS } from "../utils/constants";
 
 interface IModel extends TimeFields {
   user_ID: ObjectId;
-  to: SupportedLanguage;
+  to: string;
   name: string;
   lastStudyDate?: number;
   avatar: string;
   status: "active" | "completed" | "paused";
-  aiModel: string;
-  embeddingModel: string;
+  chatModel: string;
   imageGenModel: string;
-  assistantId?: string;
-  assistantHash?: string;
+  ttsModel: string;
+  sttModel: string;
+  progress: BrocaTypes.Progress.PathProgress;
+  paths: {
+    [key: string]: {
+      name: string;
+      type: BrocaTypes.Progress.PathType;
+      profession?: string;
+      isMain: boolean;
+      isActive: boolean;
+    };
+  };
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "journeys",
+  collectionName: COLLECTIONS.JOURNEYS,
   cacheById: true,
   createdAtField: true,
   updatedAtField: true,

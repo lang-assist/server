@@ -1,14 +1,6 @@
 import { ObjectId, Sort } from "mongodb";
-import { DbHelper } from "./db";
-
-type PaginationInput = {
-  cursor?: string;
-  filter?: {
-    [key: string]: any;
-  };
-  sort?: string;
-  limit?: number;
-};
+import { DbHelper, WithGQLID } from "./db";
+import { GqlTypes } from "../utils/gql-types";
 
 interface CursorValue {
   _id: string;
@@ -39,21 +31,21 @@ class Cursor {
   }
 }
 
-async function paginate(
+async function paginate<
+  T extends {
+    id: string;
+  } = {
+    id: string;
+  }
+>(
   collectionName: string,
-  pagination: PaginationInput = {},
+  pagination: GqlTypes.PaginationInput = {},
   options?: {
     additionalQuery?: {
       [key: string]: any;
     };
   }
-): Promise<{
-  pageInfo: {
-    hasNextPage: boolean;
-    nextCursor: string | null;
-  };
-  items: any[];
-}> {
+): Promise<GqlTypes.Connection<T>> {
   if (!pagination) {
     pagination = {};
   }
@@ -146,13 +138,13 @@ async function paginate(
       hasNextPage,
       nextCursor,
     },
-    items: results,
+    items: results as WithGQLID<T>[],
   };
 }
 
 async function groupBy(
   collectionName: string,
-  pagination: PaginationInput = {},
+  pagination: GqlTypes.PaginationInput = {},
   groupFields: string[],
   options?: {
     additionalQuery?: {
@@ -380,4 +372,4 @@ function modify(obj: any): any {
   return obj;
 }
 
-export { PaginationInput, Cursor, paginate, groupBy, modify };
+export { Cursor, paginate, groupBy, modify };

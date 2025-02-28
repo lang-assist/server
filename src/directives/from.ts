@@ -3,7 +3,8 @@ import { getDirective, MapperKind, mapSchema } from "@graphql-tools/utils";
 import ApiError from "../utils/error";
 import { DbHelper, ObjectId } from "../helpers/db";
 import { withAuthGQL } from "../middleware/with_auth";
-import { applyContext, AppContext } from "../utils/types";
+import { applyContext } from "../utils/types";
+import { AppContext } from "../utils/types";
 
 const referenceDirective = (schema: GraphQLSchema): GraphQLSchema => {
   return mapSchema(schema, {

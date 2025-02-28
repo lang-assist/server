@@ -1,4 +1,5 @@
 import { DbHelper, ObjectId, TimeFields } from "../helpers/db";
+import { COLLECTIONS } from "../utils/constants";
 import { FOLDER_TYPE } from "../utils/constants";
 
 interface _Base {
@@ -15,7 +16,7 @@ interface _Base {
 type IModel = TimeFields & _Base;
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "files",
+  collectionName: COLLECTIONS.STORED_FILES,
   cacheById: true,
   createdAtField: true,
   updatedAtField: true,

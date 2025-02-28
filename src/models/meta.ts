@@ -1,4 +1,5 @@
 import { DbHelper } from "../helpers/db";
+import { COLLECTIONS } from "../utils/constants";
 
 interface IModel {
   name: string;
@@ -6,7 +7,7 @@ interface IModel {
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "metadata",
+  collectionName: COLLECTIONS.METAS,
   createdAtField: false,
   updatedAtField: false,
   cacheById: false,

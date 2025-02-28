@@ -1,0 +1,87 @@
+{
+  "files": {
+    "role": "shared/role.md",
+    "platform": "shared/platform.md",
+    "ssml": "shared/ssml.md",
+    "question": "shared/question.md",
+    "question_item": "shared/question_item.md",
+    "picture_prompt": "shared/picture_prompt.md",
+    "base_generator": "shared/base_generator.md",
+    "difficulty": "shared/difficulty.md",
+    "quiz": "generators/quiz.md",
+    "conversation": "generators/conversation.md",
+    "conversation_turn": "generators/conversation_turn.md",
+    "story": "generators/story.md",
+    "feedback": "generators/feedback.md",
+    "progress": "generators/progress.md",
+    "documentation": "generators/documentation.md",
+    "dictionary": "generators/dictionary.md",
+    "linguistic_units": "generators/linguistic_units.md",
+    "dict": "shared/dict.md",
+    "doc": "shared/doc.md"
+  },
+  "instructions": {
+    "quiz": {
+      "role": "QUIZ MATERIAL GENERATOR",
+      "parts": [
+        "role",
+        "platform",
+        "base_generator",
+        "difficulty",
+        "quiz",
+        "question",
+        "question_item",
+        "picture_prompt",
+        "ssml"
+      ]
+    },
+    "conversation": {
+      "role": "CONVERSATION MATERIAL GENERATOR",
+      "parts": [
+        "role",
+        "platform",
+        "base_generator",
+        "conversation",
+        "picture_prompt"
+      ]
+    },
+    "conversation_turn": {
+      "role": "Conversation Turn Generator",
+      "parts": ["role", "platform", "conversation_turn", "ssml"]
+    },
+    "story": {
+      "role": "STORY MATERIAL GENERATOR",
+      "parts": [
+        "role",
+        "platform",
+        "base_generator",
+        "story",
+        "question",
+        "question_item",
+        "picture_prompt",
+        "difficulty",
+        "ssml"
+      ]
+    },
+    "feedback": {
+      "role": "FEEDBACK GENERATOR",
+      "parts": ["role", "platform", "feedback", "dict", "doc"]
+    },
+    "progress": {
+      "role": "PROGRESS GENERATOR",
+      "parts": ["role", "platform", "progress"]
+    },
+    "documentation": {
+      "role": "DOCUMENTATION GENERATOR",
+      "parts": ["role", "platform", "documentation", "picture_prompt", "ssml"]
+    },
+    "dictionary": {
+      "role": "DICTIONARY GENERATOR",
+      "parts": ["role", "platform", "dictionary", "picture_prompt", "ssml"]
+    },
+    "linguistic_units": {
+      "role": "LINGUISTIC UNITS GENERATOR",
+      "parts": ["role", "platform", "linguistic_units", "dict", "doc"]
+    }
+  }
+}

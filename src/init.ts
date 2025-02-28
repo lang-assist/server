@@ -1,4 +1,10 @@
-import { CacheHelper, DbHelper, Dbs, MongoClient } from "./helpers/db";
+import {
+  CacheHelper,
+  DbHelper,
+  Dbs,
+  MongoClient,
+  MongoClientNames,
+} from "./helpers/db";
 
 import express from "express";
 import http from "http";
@@ -6,7 +12,7 @@ import { berberEnv } from "./utils/env";
 import { apiErrorHandler } from "./middleware/api_error_handler";
 import { log, Log } from "./helpers/log";
 import cors from "cors";
-
+import { initServices } from "./init_services";
 export { berberEnv };
 
 export async function initCache() {
@@ -15,7 +21,8 @@ export async function initCache() {
 
 export async function initDatabase(resolve: boolean) {
   await DbHelper.connect({
-    market: berberEnv.MONGO_URL,
+    main: berberEnv.MONGO_URL,
+    vector: berberEnv.MONGO_VECTOR_URL,
   });
 
   DbHelper.setCacheHelper(CacheHelper.instance);
@@ -24,7 +31,7 @@ export async function initDatabase(resolve: boolean) {
   else DbHelper.restoreLocally();
 }
 
-export function mongoClient(db: Dbs): MongoClient {
+export function mongoClient(db: MongoClientNames): MongoClient {
   return DbHelper.clients[db];
 }
 
@@ -35,6 +42,7 @@ export async function init(
 ): Promise<express.Application> {
   await initCache();
   await initDatabase(resolve);
+  await initServices();
 
   const app = express();
   app.use(express.json());

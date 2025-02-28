@@ -1,4 +1,5 @@
 import { DbHelper, ObjectId, TimeFields } from "../helpers/db";
+import { COLLECTIONS } from "../utils/constants";
 
 export interface IModel extends TimeFields {
   template_ID: ObjectId;
@@ -7,7 +8,7 @@ export interface IModel extends TimeFields {
 }
 
 export const Model = DbHelper.model<IModel>({
-  collectionName: "user-doc",
+  collectionName: COLLECTIONS.USER_DOCS,
   cacheById: true,
   createdAtField: true,
   updatedAtField: true,

@@ -1,6 +1,7 @@
 import { GraphQLSchema } from "graphql";
 import { getDirective, MapperKind, mapSchema } from "@graphql-tools/utils";
-import { groupBy, paginate, PaginationInput } from "../helpers/pagination";
+import { groupBy, paginate } from "../helpers/pagination";
+import { GqlTypes } from "../utils/gql-types";
 
 const connectionDirective = (schema: GraphQLSchema): GraphQLSchema => {
   return mapSchema(schema, {
@@ -11,7 +12,7 @@ const connectionDirective = (schema: GraphQLSchema): GraphQLSchema => {
         const { collection: collectionName, foreignField } = directive[0];
 
         fieldConfig.resolve = async function (source, args, context, info) {
-          const pagination: PaginationInput = args.pagination || {};
+          const pagination: GqlTypes.PaginationInput = args.pagination || {};
 
           const result = await paginate(collectionName, pagination, {
             additionalQuery: {
@@ -42,7 +43,7 @@ const groupedConnectionDirective = (schema: GraphQLSchema): GraphQLSchema => {
         const groupFields = groupedConnectionDirective[0].groupFields;
 
         fieldConfig.resolve = async function (source, args, context, info) {
-          const pagination: PaginationInput = args.pagination || {};
+          const pagination: GqlTypes.PaginationInput = args.pagination || {};
 
           const result = await groupBy(collection, pagination, groupFields, {
             [foreignField]: source.id,
@@ -66,7 +67,7 @@ const groupByDirective = (schema: GraphQLSchema): GraphQLSchema => {
         const groupFields = groupByDirective[0].groupFields;
 
         fieldConfig.resolve = async function (source, args, context, info) {
-          const pagination: PaginationInput = args.pagination || {};
+          const pagination: GqlTypes.PaginationInput = args.pagination || {};
 
           const result = await groupBy(collection, pagination, groupFields);
 
@@ -87,7 +88,7 @@ const paginateDirective = (schema: GraphQLSchema): GraphQLSchema => {
         const collection = paginateDirective[0].collection;
 
         fieldConfig.resolve = async function (source, args, context, info) {
-          const pagination: PaginationInput = args.pagination || {};
+          const pagination: GqlTypes.PaginationInput = args.pagination || {};
 
           const result = await paginate(collection, pagination);
 

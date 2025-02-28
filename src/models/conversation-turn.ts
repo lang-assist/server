@@ -1,4 +1,5 @@
 import { CreatedAtField, DbHelper, ObjectId } from "../helpers/db";
+import { COLLECTIONS } from "../utils/constants";
 
 interface IModel extends CreatedAtField {
   character: string;
@@ -7,12 +8,14 @@ interface IModel extends CreatedAtField {
   audio_ID?: ObjectId;
   audioError?: Error;
   nextTurn?: string | null;
-  analyze?: JSON;
+  analyze?: {
+    [key: string]: string;
+  };
   material_ID: ObjectId;
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "conversation_turns",
+  collectionName: COLLECTIONS.CONVERSATION_TURNS,
   cacheById: false,
   createdAtField: true,
   idFields: ["material_ID", "audio_ID"],

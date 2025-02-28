@@ -1,4 +1,5 @@
 import { Binary } from "mongodb";
+import { COLLECTIONS } from "../utils/constants";
 import { DbHelper } from "../helpers/db";
 
 interface IModel {
@@ -10,10 +11,12 @@ interface IModel {
   personalities?: string[];
   tailoredScenarios?: string[];
   embedding?: number[];
+  itemHash?: string;
+  globalHash?: string;
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "voices",
+  collectionName: COLLECTIONS.VOICES,
   cacheById: true,
   excludeCacheFileds: ["embedding"],
   indexes: [

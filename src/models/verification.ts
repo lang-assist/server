@@ -1,4 +1,5 @@
 import { CreatedAtField, DbHelper, TimeFields } from "../helpers/db";
+import { COLLECTIONS } from "../utils/constants";
 import { ObjectId } from "mongodb";
 
 interface IModel extends CreatedAtField {
@@ -12,7 +13,7 @@ interface IModel extends CreatedAtField {
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "verification",
+  collectionName: COLLECTIONS.VERIFICATIONS,
   createdAtField: true,
   updatedAtField: false,
   cacheById: true,
@@ -22,7 +23,7 @@ const Model = DbHelper.model<IModel>({
       key: { auth: 1 },
       unique: false,
       name: "auth",
-    }
+    },
   ],
   queryCacheFields: [],
 });

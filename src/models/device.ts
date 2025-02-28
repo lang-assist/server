@@ -1,4 +1,5 @@
 import { CreatedAtField, DbHelper, ObjectId, TimeFields } from "../helpers/db";
+import { COLLECTIONS } from "../utils/constants";
 
 interface IModel extends TimeFields {
   user?: ObjectId;
@@ -12,7 +13,7 @@ interface IModel extends TimeFields {
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "devices",
+  collectionName: COLLECTIONS.DEVICES,
   cacheById: true,
   createdAtField: true,
   updatedAtField: true,

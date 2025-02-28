@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { COLLECTIONS } from "../utils/constants";
 import { DbHelper } from "../helpers/db";
 
 export interface IModel {
@@ -7,7 +8,7 @@ export interface IModel {
 }
 
 export const Model = DbHelper.model<IModel>({
-  collectionName: "doc-search",
+  collectionName: COLLECTIONS.DOC_SEARCHES,
   cacheById: true,
   createdAtField: true,
   updatedAtField: true,

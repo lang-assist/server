@@ -87,11 +87,16 @@ class DbValidator<T> {
   }
 }
 
+export type MongoClientNames = "main" | "vector";
+
 class DbHelper {
-  static async connect(urls: { [key: string]: string }) {
+  static async connect(urls: { [key in MongoClientNames]: string }) {
     const promises = Object.keys(urls).map(async (key) => {
-      DbHelper.clients[key] = new MongoClient(urls[key], {});
-      await DbHelper.clients[key].connect();
+      const k = key as MongoClientNames;
+      const url = urls[k];
+
+      DbHelper.clients[k] = new MongoClient(url, {});
+      await DbHelper.clients[k].connect();
     });
 
     await Promise.all(promises);
@@ -101,8 +106,9 @@ class DbHelper {
     DbHelper.cacheHelper = cacheHelper;
   }
 
+  // @ts-ignore
   static clients: {
-    [key: string]: MongoClient;
+    [key in MongoClientNames]: MongoClient;
   } = {};
 
   static views: {
@@ -119,7 +125,7 @@ class DbHelper {
   static cacheHelper?: CacheHelper;
 
   static mongoCollection(name: string) {
-    return DbHelper.clients["market"].db().collection(name);
+    return DbHelper.clients["main"].db().collection(name);
   }
 
   static collection<
@@ -150,7 +156,7 @@ class DbHelper {
       return DbHelper.models[params.collectionName];
     } else {
       const model = new DbModel<T>(
-        "market",
+        "main",
         params.cacheById || false,
         DbHelper.cacheHelper,
         params.createdAtField || false,
@@ -186,7 +192,7 @@ class DbHelper {
       return DbHelper.models[params.collectionName];
     } else {
       const model = new DbModel<T>(
-        "market",
+        "main",
         false,
         DbHelper.cacheHelper,
         false,
@@ -218,7 +224,7 @@ class DbHelper {
 
   static async resolve() {
     try {
-      const client = DbHelper.clients["market"];
+      const client = DbHelper.clients["main"];
       const meta = await client.db().collection("metadata").findOne({
         name: "hashes",
       });
@@ -250,7 +256,10 @@ class DbHelper {
 
       for (const db of Object.keys(DbHelper.clients)) {
         collections = collections.concat(
-          ...(await DbHelper.clients[db].db().listCollections().toArray())
+          ...(await DbHelper.clients[db as MongoClientNames]
+            .db()
+            .listCollections()
+            .toArray())
         );
       }
 
@@ -274,7 +283,10 @@ class DbHelper {
 
       for (const db of Object.keys(DbHelper.clients)) {
         collections = collections.concat(
-          ...(await DbHelper.clients[db].db().listCollections().toArray())
+          ...(await DbHelper.clients[db as MongoClientNames]
+            .db()
+            .listCollections()
+            .toArray())
         );
       }
 
@@ -323,7 +335,7 @@ class DbHelper {
   static async restorePipeline(modelName: string) {
     const model = DbHelper.views[modelName];
     if (model.pipeline) {
-      const cl = DbHelper.clients["market"];
+      const cl = DbHelper.clients["main"];
 
       await cl.db().command({
         collMod: modelName,
@@ -423,8 +435,14 @@ export type DbModelValidator<T> = (
 type UpdateData<T> = {
   $set?: Partial<T>;
   $push?: Partial<T>;
-  $unset?: Partial<T>;
+  $unset?: {
+    [key: string]: 1 | 0;
+  };
   $pull?: Partial<T>;
+};
+
+export type WithGQLID<T> = WithId<T> & {
+  id: string;
 };
 
 class DbModel<
@@ -433,7 +451,7 @@ class DbModel<
   }
 > {
   constructor(
-    db: Dbs,
+    db: MongoClientNames,
     cacheById: boolean = false,
     cacheHelper?: CacheHelper,
     createdAtField?: boolean,
@@ -456,7 +474,7 @@ class DbModel<
     this.excludeCacheFileds = excludeCacheFileds;
   }
 
-  db: Dbs;
+  db: MongoClientNames;
 
   idFields?: string[];
   cacheById: boolean;
@@ -473,7 +491,9 @@ class DbModel<
       | {
           $set?: Partial<T>;
           $push?: Partial<T>;
-          $unset?: Partial<T>;
+          $unset?: {
+            [key: string]: 1 | 0;
+          };
           $pull?: Partial<T>;
         }
       | T
@@ -501,6 +521,7 @@ class DbModel<
     return {
       ...json,
       _id: new ObjectId(json._id as string),
+      id: json._id.toHexString(),
       ...(this.idFields ?? []).reduce((acc: any, idField: string) => {
         if (json[idField]) {
           acc[idField] = new ObjectId(json[idField] as string);
@@ -528,8 +549,10 @@ class DbModel<
   async find(
     query: Filter<T>,
     options?: FindOptions<Document>
-  ): Promise<WithId<T>[]> {
-    return await this.collection.find(query, options).toArray();
+  ): Promise<WithGQLID<T>[]> {
+    return this._returnArrWithGQLIDPromise(
+      this.collection.find(query, options).toArray()
+    );
   }
 
   async aggregate(pipeline: Document[]): Promise<Document[]> {
@@ -588,7 +611,7 @@ class DbModel<
 
     if (cached) {
       const parsed = JSON.parse(cached);
-      parsed._id = new ObjectId(parsed._id);
+      parsed._id = new ObjectId(parsed._id as string);
 
       if (this.idFields) {
         for (const idField of this.idFields) {
@@ -608,30 +631,68 @@ class DbModel<
     }
   }
 
+  private _returnWithGQLIDPromise<T>(
+    data: Promise<WithId<T> | null>
+  ): Promise<WithGQLID<T> | null> {
+    return data.then((data) => {
+      return this._returnWithGQLID(data);
+    });
+  }
+
+  private _returnWithGQLID<T>(data: WithId<T> | null): WithGQLID<T> | null {
+    if (data) {
+      return {
+        ...data,
+        id: data._id.toHexString(),
+      } as WithGQLID<T>;
+    } else {
+      return null;
+    }
+  }
+
+  private _returnArrWithGQLIDPromise<T>(
+    data: Promise<WithId<T>[]>
+  ): Promise<WithGQLID<T>[]> {
+    return data.then((data) => {
+      return this._returnArrWithGQLID(data);
+    });
+  }
+
+  private _returnArrWithGQLID<T>(data: WithId<T>[]): WithGQLID<T>[] {
+    return data.map((item) => this._returnWithGQLID(item)!);
+  }
+
   async findOne(
     query: Filter<T>,
     options?: FindOptions<T>
-  ): Promise<WithId<T> | null> {
+  ): Promise<WithGQLID<T> | null> {
     if (
       this.cacheQueryFields &&
       Object.keys(query).length === 1 &&
       this.cacheQueryFields.includes(Object.keys(query)[0])
     ) {
-      return this.cacheHelper!.getCacheWithQuery<T>(
-        this,
-        Object.keys(query)[0],
-        Object.values(query)[0]
+      return this._returnWithGQLIDPromise(
+        this.cacheHelper!.getCacheWithQuery<T>(
+          this,
+          Object.keys(query)[0],
+          Object.values(query)[0]
+        )
       );
     }
 
-    return await this.collection.findOne(query, options);
+    return this._returnWithGQLIDPromise(
+      this.collection.findOne(query, options)
+    );
   }
 
   async exists(query: Filter<T>): Promise<boolean> {
     return (await this.collection.findOne(query)) !== null;
   }
 
-  async insertOne(data: Partial<T>, _id?: ObjectId): Promise<WithId<T> | null> {
+  async insertOne(
+    data: Partial<T>,
+    _id?: ObjectId
+  ): Promise<WithGQLID<T> | null> {
     if (!data) {
       throw new Error("data_required");
     }
@@ -659,7 +720,7 @@ class DbModel<
     }
   }
 
-  async insertMany(data: Partial<T>[]) {
+  async insertMany(data: Partial<T>[]): Promise<WithGQLID<T>[]> {
     if (data.length === 0) {
       throw new Error("data_required");
     }
@@ -684,18 +745,20 @@ class DbModel<
 
     const result = await this.collection.insertMany(data as any);
 
-    return this.find({
-      _id: {
-        $in: Object.values(result.insertedIds),
-      },
-    } as Filter<T>);
+    return this._returnArrWithGQLIDPromise(
+      this.find({
+        _id: {
+          $in: Object.values(result.insertedIds),
+        },
+      } as Filter<T>)
+    );
   }
 
   async updateOne(
     query: UpdateFilter<T>,
     data: UpdateData<T>,
     options?: UpdateOptions
-  ): Promise<WithId<T> | null> {
+  ): Promise<WithGQLID<T> | null> {
     if (this.updatedAtField) {
       const $set = (data.$set || {}) as any;
       $set.updatedAt = Date.now();
@@ -725,7 +788,7 @@ class DbModel<
     query: UpdateFilter<T>,
     data: UpdateData<T>,
     options?: UpdateOptions
-  ): Promise<WithId<T>[] | null> {
+  ): Promise<WithGQLID<T>[] | null> {
     if (this.updatedAtField) {
       const $set = (data.$set || {}) as any;
       $set.updatedAt = Date.now();
@@ -751,7 +814,7 @@ class DbModel<
     return null;
   }
 
-  async deleteOne(query: any): Promise<WithId<T> | null> {
+  async deleteOne(query: any): Promise<WithGQLID<T> | null> {
     const toDelete = await this.findOne(query);
     if (toDelete) {
       const result = await this.collection.deleteOne(query);
@@ -771,12 +834,12 @@ class DbModel<
   async findById(
     id: ObjectId,
     options?: FindOptions<T>
-  ): Promise<WithId<T> | null> {
+  ): Promise<WithGQLID<T> | null> {
     if (this.cacheById === true) {
       const cached = await this.readFromCache(id);
 
       if (cached) {
-        return cached;
+        return this._returnWithGQLID(cached);
       } else {
         const found = await this.collection.findOne(
           {
@@ -789,18 +852,20 @@ class DbModel<
 
         if (found) {
           await this.writeToCache(found as WithId<T>);
-          return found as WithId<T>;
+          return this._returnWithGQLID(found as WithId<T>);
         } else {
           return null;
         }
       }
     }
 
-    return await this.collection.findOne({
-      _id: {
-        $eq: id,
-      },
-    } as Filter<T>);
+    return this._returnWithGQLIDPromise(
+      this.collection.findOne({
+        _id: {
+          $eq: id,
+        },
+      } as Filter<T>)
+    );
   }
 
   async findByIdAndUpdate(
@@ -810,7 +875,7 @@ class DbModel<
       updateTime?: boolean;
       upsert?: boolean;
     }
-  ): Promise<WithId<T> | null> {
+  ): Promise<WithGQLID<T> | null> {
     if (this.updatedAtField && options?.updateTime !== false) {
       const $set = (data.$set || {}) as any;
       $set.updatedAt = Date.now();
@@ -840,14 +905,14 @@ class DbModel<
       if (updated) {
         await this.writeToCache(updated);
 
-        return updated;
+        return this._returnWithGQLID(updated);
       }
     }
 
     return null;
   }
 
-  async findByIdAndDelete(id: ObjectId): Promise<WithId<T> | null> {
+  async findByIdAndDelete(id: ObjectId): Promise<WithGQLID<T> | null> {
     const toDelete = await this.findById(id);
 
     if (toDelete) {
@@ -869,7 +934,7 @@ class DbModel<
     }
   }
 
-  async deleteMany(query: Filter<T>): Promise<WithId<T>[] | null> {
+  async deleteMany(query: Filter<T>): Promise<WithGQLID<T>[] | null> {
     const toDelete = await this.find(query);
 
     if (toDelete.length > 0) {

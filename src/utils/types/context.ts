@@ -1,7 +1,7 @@
 import bunyan from "bunyan";
 import { BaseContext } from "@apollo/server";
 import { Response } from "express";
-import { IResolvers } from "@graphql-tools/utils";
+// import { IResolvers } from "@graphql-tools/utils";
 import ApiError from "../error";
 import { IAuth } from "../../models/_index";
 import { IAdmin } from "../../models/_index";
@@ -10,6 +10,7 @@ import { IUser } from "../../models/_index";
 import { PermissionManager } from "../permission";
 import { WithId } from "mongodb";
 import { IDevice } from "../../models/_index";
+import { IResolvers } from "@graphql-tools/utils";
 
 export type AppResolvers<
   S extends any = any,
@@ -62,14 +63,18 @@ export interface AppContext extends BaseContext {
 //     }
 // }
 declare global {
-  namespace AIPrompter {
-    interface BuildingPrompt {
-      tags: string[];
-    }
-  }
   namespace Express {
     interface Request {
       log: bunyan;
     }
   }
+
+  interface String {
+    asLanguageTag(): string;
+  }
 }
+
+String.prototype.asLanguageTag = function () {
+  const tag = this.replace(/-/g, "_");
+  return tag;
+};

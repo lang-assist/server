@@ -12,9 +12,9 @@ import { randomColor, randomString } from "../utils/random";
 import { Router, Response } from "express";
 import { Readable } from "stream";
 import { log } from "./log";
-import { PictureHelper } from "./picture";
 import multer from "multer";
-import { AudioHelper } from "./audio";
+import { AudioHelper } from "./audio_helper";
+import { PictureHelper } from "./picture_helper";
 
 export abstract class StorageInterface {
   abstract uploadFile(
@@ -389,7 +389,7 @@ export class StorageService {
     router.get("/audio/:id", async (req, res, next) => {
       const id = new ObjectId(req.params.id);
 
-      const gen = AudioHelper.generating[id.toHexString()];
+      const gen = AudioHelper.getGen(id.toHexString());
 
       if (gen) {
         await gen;
@@ -417,7 +417,7 @@ export class StorageService {
       let fileEntry = await StoredFile.findById(id);
 
       if (!fileEntry) {
-        const gen = PictureHelper.generating[id.toHexString()];
+        const gen = PictureHelper.getGen(id.toHexString());
         if (gen) {
           await gen;
         }

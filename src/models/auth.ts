@@ -1,68 +1,55 @@
 import { CreatedAtField, DbHelper, TimeFields } from "../helpers/db";
+import { COLLECTIONS } from "../utils/constants";
 import { ObjectId } from "mongodb";
 
-
 interface IModel extends CreatedAtField {
+  // User ID
+  user: ObjectId;
 
-    // User ID
-    user: ObjectId;
+  email?: string;
+  phone?: string;
 
-    email?: string;
-    phone?: string;
+  verified: boolean;
 
-    verified: boolean;
+  password?: string;
+  provider: "e-pwd" | "ph-pwd" | "google" | "apple";
 
-    password?: string;
-    provider: "e-pwd" | "ph-pwd" | "google" | "apple";
+  providerInfo?: {
+    name: string;
+    user_id: string;
+    token: string;
+    refreshToken?: string;
+  };
 
-    providerInfo?: {
-        name: string;
-        user_id: string;
-        token: string;
-        refreshToken?: string;
-    }
-
-    secret?: string;
-
-
-
+  secret?: string;
 }
-
-
-
-
 
 const Model = DbHelper.model<IModel>({
-    collectionName: "auth",
-    createdAtField: true,
-    updatedAtField: false,
-    cacheById: true,
-    idFields: ["user"],
-    indexes: [
-        {
-            key: { email: 1 },
-            unique: false,
-            sparse: true,
-            name: "email"
-        },
-        {
-            key: { phone: 1 },
-            unique: false,
-            sparse: true,
-            name: "phone"
-        },
-        {
-            key: { user: 1 },
-            unique: false,
-            name: "user"
-        }
-    ],
-    queryCacheFields: []
+  collectionName: COLLECTIONS.AUTHS,
+  createdAtField: true,
+  updatedAtField: false,
+  cacheById: true,
+  idFields: ["user"],
+  indexes: [
+    {
+      key: { email: 1 },
+      unique: false,
+      sparse: true,
+      name: "email",
+    },
+    {
+      key: { phone: 1 },
+      unique: false,
+      sparse: true,
+      name: "phone",
+    },
+    {
+      key: { user: 1 },
+      unique: false,
+      name: "user",
+    },
+  ],
+  queryCacheFields: [],
+});
 
-})
-
-
-export {
-    Model,
-    IModel
-}
+export { Model, IModel };

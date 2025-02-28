@@ -1,4 +1,5 @@
 import { CreatedAtField, DbHelper } from "../helpers/db";
+import { COLLECTIONS } from "../utils/constants";
 
 interface IModel extends CreatedAtField {
   model: string;
@@ -7,7 +8,7 @@ interface IModel extends CreatedAtField {
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "ai_errors",
+  collectionName: COLLECTIONS.AI_ERRORS,
   createdAtField: true,
   cacheById: false,
 });

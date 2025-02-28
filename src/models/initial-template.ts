@@ -1,16 +1,17 @@
 import { DbHelper } from "../helpers/db";
-import { AIGeneratedMaterialResponse } from "../utils/ai-types";
-import { SupportedLocale } from "../utils/types";
-
+import { COLLECTIONS } from "../utils/constants";
+import { BrocaTypes } from "../types";
 interface IModel {
-  locale: SupportedLocale;
-  materials: AIGeneratedMaterialResponse[]; // material template ids
+  language: string;
+  materials: BrocaTypes.Material.Material[]; // material template ids
   aiModel: string;
+  embeddingModel: string;
+  imageGenModel: string;
   level: 3 | 2 | 1;
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "initial-templates",
+  collectionName: COLLECTIONS.INITIAL_TEMPLATES,
   indexes: [
     {
       key: {

@@ -1,16 +1,11 @@
 import { Meta } from "../models/_index";
-import { AIModels, MsgGenerationType } from "../utils/ai-types";
-import crypto from "crypto";
+import { BrocaTypes } from "../types";
 
 export class GlobalAssistantManager {
   // @ts-ignore
   private static assistants: {
-    [key in MsgGenerationType]: {
-      [key in AIModels]: {
-        assistantId: string;
-        instructionVersion: number;
-        schemaVersion: number;
-      };
+    [key in BrocaTypes.AI.Types.MsgGenerationType]: {
+      [key: string]: BrocaTypes.AI.AIAssistant;
     };
   } = {};
 
@@ -25,16 +20,22 @@ export class GlobalAssistantManager {
       const [type, model] = assistant.name.split("-").slice(1);
       const { instructionVersion, schemaVersion, assistantId } = assistant;
 
-      if (!this.assistants[type as MsgGenerationType]) {
+      if (!this.assistants[type as BrocaTypes.AI.Types.MsgGenerationType]) {
         // @ts-ignore
-        this.assistants[type as MsgGenerationType] = {};
+        this.assistants[type as BrocaTypes.AI.Types.MsgGenerationType] = {};
       }
 
-      if (!this.assistants[type as MsgGenerationType][model as AIModels]) {
+      if (
+        !this.assistants[type as BrocaTypes.AI.Types.MsgGenerationType][
+          model as string
+        ]
+      ) {
         // @ts-ignore
-        this.assistants[type as MsgGenerationType][model as AIModels] = {
-          assistantId: assistantId,
-          instructionVersion,
+        this.assistants[type as BrocaTypes.AI.Types.MsgGenerationType][
+          model as string
+        ] = {
+          id: assistantId,
+          version: instructionVersion,
           schemaVersion,
         };
       }
@@ -42,34 +43,30 @@ export class GlobalAssistantManager {
   }
 
   public static getAssistant(
-    type: MsgGenerationType,
-    model: AIModels,
-    instructionVersion: number,
-    schemaVersion: number
-  ): {
-    assistantId: string;
-    instructionVersion: number;
-    schemaVersion: number;
-  } | null {
+    type: BrocaTypes.AI.Types.MsgGenerationType,
+    model: string
+    // instructionVersion: number,
+    // schemaVersion: number
+  ): BrocaTypes.AI.AIAssistant | null {
     if (this.assistants[type] && this.assistants[type][model]) {
-      if (
-        this.assistants[type][model].instructionVersion ===
-          instructionVersion &&
-        this.assistants[type][model].schemaVersion === schemaVersion
-      ) {
-        return this.assistants[type][model];
-      } else {
-        Meta.deleteOne({
-          name: `assistant-${type}-${model}`,
-        });
-      }
+      // if (
+      //   this.assistants[type][model].version === instructionVersion &&
+      //   this.assistants[type][model].schemaVersion === schemaVersion
+      // ) {
+      //   return this.assistants[type][model];
+      // } else {
+      //   Meta.deleteOne({
+      //     name: `assistant-${type}-${model}`,
+      //   });
+      // }
+      return this.assistants[type][model];
     }
     return null;
   }
 
   public static async createAssistant(args: {
-    type: MsgGenerationType;
-    model: AIModels;
+    type: BrocaTypes.AI.Types.MsgGenerationType;
+    model: string;
     instructionVersion: number;
     schemaVersion: number;
     assistantId: string;

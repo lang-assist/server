@@ -1,19 +1,26 @@
 import { DbHelper, ObjectId, TimeFields } from "../helpers/db";
-import { Explanation } from "../utils/types";
-
+import { COLLECTIONS } from "../utils/constants";
+import { BrocaTypes } from "../types";
 export interface IModel extends TimeFields {
   aiModel: string;
   title: string;
   description: string;
   language: string;
-  explanations: Explanation[];
+  explanations: BrocaTypes.Documentation.Explanation[];
   includes: string[];
 }
 
 export const Model = DbHelper.model<IModel>({
-  collectionName: "doc-template",
+  collectionName: COLLECTIONS.DOC_TEMPLATES,
   cacheById: false,
   createdAtField: true,
   updatedAtField: true,
-  indexes: [],
+  indexes: [
+    {
+      key: {
+        language: 1,
+        aiModel: 1,
+      },
+    },
+  ],
 });

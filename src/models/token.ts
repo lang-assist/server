@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { COLLECTIONS } from "../utils/constants";
 import { DbHelper } from "../helpers/db";
 
 interface IModel {
@@ -23,7 +24,7 @@ interface IModel {
 }
 
 const Model = DbHelper.model<IModel>({
-  collectionName: "tokens",
+  collectionName: COLLECTIONS.TOKENS,
   cacheById: true,
   createdAtField: false,
   updatedAtField: false,
@@ -33,7 +34,7 @@ const Model = DbHelper.model<IModel>({
       key: { sub: 1 },
       unique: false,
       name: "sub",
-    }
+    },
   ],
 });
 

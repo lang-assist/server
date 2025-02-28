@@ -25,9 +25,6 @@ import { WebSocketServer } from "ws";
 import { useServer } from "graphql-ws/lib/use/ws";
 import { AppContext } from "./utils/types";
 import { withAuthGQL } from "./middleware/with_auth";
-import { AzureVoice } from "./helpers/voice/azure";
-import { Terms } from "./models/_index";
-import { AIEmbeddingGenerator, AIImageGenerator } from "./helpers/ai/base";
 import { StorageService } from "./helpers/storage";
 
 function loadSchema(): string[] {
@@ -249,16 +246,7 @@ import {
   userSubscriptions,
 } from "./resolvers/user";
 import { RoleHelper } from "./helpers/role";
-import { AIModel } from "./helpers/ai";
-import {
-  OpenAIEmbeddingGenerator,
-  OpenAIModelAssistant,
-} from "./helpers/ai/chatgpt-assistant";
-import { OpenAIModel } from "./helpers/ai/chatgpt";
-import { ClaudeModel } from "./helpers/ai/claude";
-import { FalImageGenerator } from "./helpers/ai/fal-img";
-import { TermManager } from "./helpers/term";
-import { AzureOpenAIModel } from "./helpers/ai/azure-chatgpt";
+import { TermManager } from "./helpers/gen/term";
 function listen() {
   if (berberEnv.ENV !== "local") {
     return;
@@ -455,69 +443,6 @@ init(
   true
 ).then(async () => {
   await RoleHelper.checkAndCreatePredefinedRoles();
-  await AIModel.init({
-    "gpt-4o-assistant": new OpenAIModelAssistant("gpt-4o", {
-      input: 2.5,
-      output: 10,
-    }),
-    "gpt-4o-mini-assistant": new OpenAIModelAssistant("gpt-4o-mini", {
-      input: 0.15,
-      output: 0.6,
-    }),
-    "gpt-4o": new AzureOpenAIModel(
-      "gpt-4o",
-      process.env.AZURE_AI_KEY!,
-      {
-        input: 2.5,
-        output: 10,
-      },
-      "https://broca-oai418024195739.cognitiveservices.azure.com/",
-      "gpt-4o"
-    ),
-    "gpt-o1": new OpenAIModel("o1", process.env.OPENAI_API_KEY!, {
-      input: 15,
-      output: 60,
-    }),
-
-    "gpt-o1-mini": new OpenAIModel("o1-mini", process.env.OPENAI_API_KEY!, {
-      input: 3,
-      output: 12,
-    }),
-    "claude-sonnet": new ClaudeModel(
-      "claude-3-5-sonnet-20241022",
-      process.env.ANTHROPIC_API_KEY!
-    ),
-    "deepseek-chat": new OpenAIModel(
-      "deepseek-chat",
-      process.env.DEEPSEEK_API_KEY!,
-      {
-        input: 0.0001,
-        output: 0.0004,
-      }
-    ),
-    "DeepSeek-R1": new AzureOpenAIModel(
-      "DeepSeek-R1",
-      process.env.AZURE_AI_KEY!,
-      {
-        input: 0.0001,
-        output: 0.0004,
-      },
-      "https://broca-ai-srv.cognitiveservices.azure.com",
-      "DeepSeek-R1"
-    ),
-  });
-  await AzureVoice.init();
-  await AIImageGenerator.init({
-    "fal-ai/flux/schnell": new FalImageGenerator("fal-ai/flux/schnell"),
-  });
-  await AIEmbeddingGenerator.init({
-    "text-embedding-3-large": new OpenAIEmbeddingGenerator(
-      "text-embedding-3-large"
-    ),
-    "text-embedding-3-small": new OpenAIEmbeddingGenerator(
-      "text-embedding-3-small"
-    ),
-  });
 
   // await AIEmbeddingGenerator.deleteVoiceEmbeddings();
   // await AIEmbeddingGenerator.deleteIndex();

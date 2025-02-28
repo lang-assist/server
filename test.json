@@ -1,0 +1,312 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "definitions": {
+    "QuizQuestion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "MULTIPLE_CHOICE"
+            },
+            "question": {
+              "type": "string"
+            },
+            "choices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/QuestionItem"
+              }
+            },
+            "preludeID": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "question", "id", "choices"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "CHOICE"
+            },
+            "question": {
+              "type": "string"
+            },
+            "choices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/QuestionItem"
+              }
+            },
+            "preludeID": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "question", "id", "choices"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "TRUE_FALSE"
+            },
+            "question": {
+              "type": "string"
+            },
+            "preludeID": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "question", "id"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "FILL_CHOICE"
+            },
+            "question": {
+              "type": "string"
+            },
+            "choices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/QuestionItem"
+              }
+            },
+            "secondaryChoices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/QuestionItem"
+              }
+            },
+            "preludeID": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "question", "id", "choices"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "FILL_WRITE"
+            },
+            "question": {
+              "type": "string"
+            },
+            "preludeID": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "question", "id"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "MATCHING"
+            },
+            "question": {
+              "type": "string"
+            },
+            "choices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/QuestionItem"
+              }
+            },
+            "secondaryChoices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/QuestionItem"
+              }
+            },
+            "preludeID": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "question", "id", "choices", "secondaryChoices"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "ORDERING"
+            },
+            "question": {
+              "type": "string"
+            },
+            "choices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/QuestionItem"
+              }
+            },
+            "preludeID": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "question", "id", "choices"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "TEXT_INPUT_WRITE"
+            },
+            "question": {
+              "type": "string"
+            },
+            "preludeID": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "question", "id"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "RECORD"
+            },
+            "question": {
+              "type": "string"
+            },
+            "preludeID": {
+              "type": "string"
+            }
+          },
+          "required": ["type", "question", "id"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "QuestionItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "picturePrompt": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "text"],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "details": {
+      "$ref": "#/definitions/QuizDetails"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The id of the material. It will be used to match answers and materails. Can be like 'm1', 'm2', 'quiz1', 'conv2' etc."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["STORY", "QUIZ", "CONVERSATION"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "estimatedDuration": {
+          "type": "number"
+        },
+        "focusAreas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Focus areas of the material. It will be a grammaer rule, an area of life(business, kitchen, etc.), etc."
+        },
+        "focusSkills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "writing",
+              "speaking",
+              "reading",
+              "listening",
+              "vocabulary",
+              "grammar",
+              "pronunciation",
+              "listening",
+              "speaking",
+              "lettering"
+            ]
+          },
+          "description": "Skills that the material will focus on. It will be used to generate material."
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "estimatedDuration",
+        "focusAreas",
+        "focusSkills",
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": ["details", "metadata"],
+  "additionalProperties": false
+}
