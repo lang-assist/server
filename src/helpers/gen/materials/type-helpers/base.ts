@@ -11,7 +11,7 @@ import {
 } from "../../../ai/voice/base";
 import { ImageGeneration } from "../../../ai/img/base";
 import { ConversationTurn, IUserAnswer } from "../../../../models/_index";
-import { msg } from "../../../../utils/prompter";
+import { MessageBuilder, msg } from "../../../../utils/prompter";
 import { ConversationManager } from "../conversation";
 import { StorageService } from "../../../storage";
 
@@ -58,28 +58,24 @@ export abstract class BaseMaterialTypeHelper {
 
   static prepare(
     ctx: MaterialGenerationContext,
-    details: BrocaTypes.Material.MaterialDetails,
-    metadata: BrocaTypes.Material.MaterialMetadata
+    details: BrocaTypes.Material.MaterialDetails
   ): {
-    metadata: BrocaTypes.Material.MaterialMetadata;
     details: BrocaTypes.Material.MaterialDetails;
     promises: Promise<void>[];
   } {
     const promises: Promise<void>[] = [];
 
-    const helper = BaseMaterialTypeHelper.helpers[ctx.requiredMaterial.type];
+    const type = ctx.requiredMaterial.type;
 
-    details.type = ctx.requiredMaterial.type;
+    const helper = BaseMaterialTypeHelper.helpers[type];
+
+    details.type = type;
 
     if (!helper) {
-      throw new Error(
-        `No helper found for material type ${ctx.requiredMaterial.type}`
-      );
+      throw new Error(`No helper found for material type ${type}`);
     }
     if (!details) {
-      throw new Error(
-        `No details found for material type ${ctx.requiredMaterial.type}`
-      );
+      throw new Error(`No details found for material type ${type}`);
     }
 
     const prepRes = helper.prepareDetails(ctx, details);
@@ -89,7 +85,6 @@ export abstract class BaseMaterialTypeHelper {
     promises.push(...prepRes.promises);
 
     return {
-      metadata,
       promises,
       details,
     };
@@ -128,7 +123,7 @@ export abstract class BaseMaterialTypeHelper {
 
   abstract _describeDetails(
     details: BrocaTypes.Material.MaterialDetails
-  ): string;
+  ): MessageBuilder;
 
   abstract _describeAnswer(answer: any): string;
 
@@ -226,7 +221,7 @@ export abstract class BaseMaterialTypeHelper {
     };
   }
 
-  describeQuestion(q: BrocaTypes.Material.Quiz.QuizQuestion) {
+  describeQuestion(q: BrocaTypes.Material.Quiz.QuizQuestion): MessageBuilder {
     const m = msg();
     m.addKv(`Question "${q.id}"`, (s) => {
       s.addKv("Type", q.type);
@@ -266,22 +261,22 @@ export abstract class BaseMaterialTypeHelper {
       }
     });
 
-    return m.build();
+    return m;
   }
 
-  describeQuestions(question: BrocaTypes.Material.Quiz.QuizQuestion[]) {
+  describeQuestions(
+    question: BrocaTypes.Material.Quiz.QuizQuestion[]
+  ): MessageBuilder {
     const m = msg();
 
     for (const q of question) {
-      m.addKv(`Question "${q.id}"`, this.describeQuestion(q));
+      m.add(this.describeQuestion(q));
     }
 
-    return m.build();
+    return m;
   }
 
   describeQuestionAnswer(answer: BrocaTypes.Material.Quiz.QuizAnswer) {
-
-
     const m = msg();
 
     for (const [key, a] of Object.entries(answer)) {
@@ -370,16 +365,13 @@ export abstract class BaseMaterialTypeHelper {
             );
           }
           break;
-        case "FILL_CHOICE":
-          if (!qAnswer.answer || typeof qAnswer.answer !== "string") {
-            throw new Error("Answer is required for fill choice type question");
-          }
-          break;
-        case "FILL_WRITE":
+        case "FILL_BLANK":
+          console.log(qAnswer.answer);
           if (!qAnswer.answer || typeof qAnswer.answer !== "object") {
-            throw new Error("Answer is required for fill write type question");
+            throw new Error("Answer is required for fill blank type question");
           }
           break;
+
         case "MATCHING":
           // expect string[][]
           if (
@@ -396,7 +388,7 @@ export abstract class BaseMaterialTypeHelper {
             throw new Error("Answer is required for ordering type question");
           }
           break;
-        case "TEXT_INPUT_WRITE":
+        case "TEXT_WRITE":
           if (!qAnswer.answer || typeof qAnswer.answer !== "string") {
             throw new Error(
               "Answer is required for text input write type question"
@@ -404,7 +396,6 @@ export abstract class BaseMaterialTypeHelper {
           }
           break;
         case "RECORD":
-
           if (
             !qAnswer.answer ||
             typeof qAnswer.answer !== "string" ||
@@ -423,9 +414,14 @@ export abstract class BaseMaterialTypeHelper {
               new ObjectId(qAnswer.answer as string)
             );
 
-            const transcription = new TranscriptionGeneration(buffer, ctx, {
-              reason: "answerRecord",
-            });
+            const transcription = new TranscriptionGeneration(
+              buffer,
+              ctx,
+              {
+                reason: "answerRecord",
+              },
+              ctx.flow.journey.to
+            );
 
             const transcriptionResult = await transcription.generate();
 
@@ -480,7 +476,6 @@ export abstract class BaseMaterialTypeHelper {
       const qAnswer = rawAnswer[question.id];
       answers[question.id] = qAnswer;
     }
-
 
     return answers;
   }

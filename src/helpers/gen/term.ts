@@ -1,4 +1,11 @@
-import { IJourney, Journey, Terms } from "../../models/_index";
+import {
+  IJourney,
+  ISentenceItem,
+  ITerms,
+  Journey,
+  SentenceItem,
+  Terms,
+} from "../../models/_index";
 import crypto from "crypto";
 import { ObjectId, WithId } from "mongodb";
 import { BrocaTypes } from "../../types";
@@ -10,6 +17,7 @@ import {
 import { msg, PromptBuilder } from "../../utils/prompter";
 import { AIModels } from "../../utils/constants";
 import { instructions } from "../prompts";
+import { LanguageHelper } from "../language";
 
 class LinguisticUnitsCtx extends ChatGenerationContextWithGlobalAssistant {
   public linguisticUnits: BrocaTypes.LinguisticUnits.LinguisticUnitSet | null =
@@ -40,7 +48,8 @@ class LinguisticUnitsCtx extends ChatGenerationContextWithGlobalAssistant {
 
   public constructor(
     public readonly journey: WithId<IJourney>,
-    public text: string
+    public text: string,
+    public sentenceItem: WithId<ISentenceItem> | null = null
   ) {
     super("linguisticUnits", "linguisticUnits");
   }
@@ -53,6 +62,76 @@ export class TermManager {
   private static hash(text: string): string {
     const hs = crypto.createHash("md5").update(text).digest("hex");
     return hs;
+  }
+
+  private static _resolving: {
+    [key: string]: LinguisticUnitsCtx;
+  } = {};
+
+  public static async resolveSentence(
+    sentence: string,
+    resolveInstructions: string,
+    journey: WithId<IJourney>,
+    sentenceItem: WithId<ISentenceItem>
+  ): Promise<WithId<ISentenceItem>> {
+    try {
+      if (this._resolving[sentenceItem._id.toString()]) {
+        await this._resolving[sentenceItem._id.toString()].waitUntil(
+          "completed"
+        );
+        return this._resolving[sentenceItem._id.toString()].sentenceItem!;
+      }
+
+      const ctx = new LinguisticUnitsCtx(journey, sentence, sentenceItem);
+
+      const builder = new PromptBuilder({
+        userName: "user",
+        language: journey.to,
+      });
+
+      builder.systemMessage(
+        instructions.linguistic_units.content,
+        "assistant",
+        1
+      );
+
+      const toName = LanguageHelper.getEnglishName(journey.to);
+
+      builder.userMessage(
+        msg(
+          `The user is learning ${toName}. Resolve the following text into linguistic units in ${toName}. All fields MUST be in ${toName}. Resolving instruction: ${resolveInstructions}:\n'${sentence}'`
+        )
+      );
+
+      ctx.startGeneration();
+
+      const gen = new ChatGeneration("linguisticUnits", builder, ctx);
+
+      const aiResult = await gen.generate();
+
+      console.log(aiResult);
+
+      const updated = await SentenceItem.findByIdAndUpdate(sentenceItem._id, {
+        $set: {
+          units: aiResult.result,
+          genStatus: "GENERATED",
+        },
+      });
+
+      if (!updated) {
+        throw new Error("Sentence item not updated");
+      }
+
+      ctx.sentenceItem = updated;
+
+      await ctx.complete();
+
+      return updated;
+    } catch (e) {
+      throw e;
+    } finally {
+      delete this._resolving[sentenceItem._id.toString()];
+    }
   }
 
   public static async resolve(
@@ -92,15 +171,20 @@ export class TermManager {
         1
       );
 
+      const toName = LanguageHelper.getEnglishName(journey.to);
+
       builder.userMessage(
-        msg(`Resolve the following text into linguistic units:\n'${text}'`)
+        msg(
+          `The user is learning ${toName}. Resolve the following text into linguistic units in ${toName}. All fields MUST be in ${toName}.:\n'${text}'`
+        )
       );
 
+      ctx.startGeneration();
       const gen = new ChatGeneration("linguisticUnits", builder, ctx);
 
-      ctx.startGeneration();
-
       const aiResult = await gen.generate();
+
+      console.log(aiResult);
 
       await Terms.insertOne({
         hash,

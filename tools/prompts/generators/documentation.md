@@ -81,14 +81,7 @@ available voices:
 
 ### 1. Text Explanation
 
-Text explanations can use HTML tags for rich formatting. Available tags:
-
-Text explanation is a JSON object with "type", "text", and "ui" fields.
-"type" is always "text". "text" is HTML formatted text. "ui" is the UI type like "explanation".
-
-Supported HTML tags: `<h1>`, `<h2>`, `<h3>` for headings, `<p>` for paragraphs, `<b>`, `<strong>` for bold text, `<i>`, `<em>` for italic text, `<ul>`, `<ol>`, `<li>` for lists, `<div>` for grouping, `<span>` for inline styling, `<br>` for line breaks.
-
-DO NOT use: `<html>`, `<head>`, `<body>` tags, Style attributes, Class or ID attributes, Script tags, External resources.
+Text explanations can use HTML tags for rich formatting. (HTML TEXT GUIDELINES)
 
 ### 2. Picture Explanation
 

@@ -1,6 +1,6 @@
 # Question Item Structure
 
-Question items are used in both quiz and story materials. They define the structure of choices, and secondary choices in questions.
+Question items are used in both quiz and story tasks. They define the structure of choices, and secondary choices in questions.
 
 Used in question.choices, question.secondaryChoices arrays.
 
@@ -8,11 +8,17 @@ Used in question.choices, question.secondaryChoices arrays.
 
 Every question item must have these fields:
 
-`id`: Unique identifier within its context. Must be unique within the material. Format examples: 'a1', 'choice2', 'match3'. NO duplicates allowed in same array or question
+- `id`: Unique identifier within its context. Must be unique within the task. Format examples: 'a1', 'choice2', 'match3'. NO duplicates allowed in same array or question
 
-`text`: User-facing text of the item. Required for all types except when using only pictures. Must be clear and concise
+- `text`: User-facing text of the item. Required for all types except when using only pictures. Must be clear and concise. Leave empty if it will be an unnecessary clue (generally using with picture or ssml will be unnecessary clues, but not always).
 
-`picturePrompt` (optional): Used when item needs visual representation. Must follow [Picture Prompt Guidelines](#picture-prompt-guidelines). Only use when visuals add value to learning
+- `picturePrompt` (optional): Used when item needs visual representation. Must follow [Picture Prompt Guidelines]. Only use when visuals add value to learning.
+
+If `picturePrompt` will be used, all question items in the same question should have a picture prompt.
+
+- `ssml` (optional): Used when item needs to be pronounced. Must follow [SSML Guidelines]. Only use when pronunciation adds value to learning. Use this for pronunciation of words, graphemes, phonemes, etc. not the whole text or sentences. You can use only provided voices and styles. DO NOT use any other voices or styles.
+
+If `ssml` will be used, all question items in the same question should have an ssml.
 
 ## Best Practices
 

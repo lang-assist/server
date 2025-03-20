@@ -24,6 +24,7 @@ interface SelectedNarrators {
   id: ObjectId;
   shortName: string;
   styles: string[];
+  gender: string;
 }
 
 export class VoiceManager {
@@ -87,10 +88,19 @@ export class VoiceManager {
 
     if (!meta) {
       voiceIds = await this._selectNarrators(language);
-      await Meta.insertOne({
-        name: `selected_narrators_${language}`,
-        value: voiceIds,
-      });
+      await Meta.updateOne(
+        {
+          name: `selected_narrators_${language}`,
+        },
+        {
+          $set: {
+            value: voiceIds,
+          },
+        },
+        {
+          upsert: true,
+        }
+      );
     } else {
       voiceIds = meta.value.map((v: any) =>
         v instanceof ObjectId ? v : new ObjectId(v as string)
@@ -107,6 +117,7 @@ export class VoiceManager {
         id: v._id,
         shortName: v.shortName,
         styles: v.styles ?? [],
+        gender: v.gender,
       }));
 
     return this._voices[language];

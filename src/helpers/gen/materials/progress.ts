@@ -1,10 +1,16 @@
 import {
+  DictItem,
+  Docs,
   IJourney,
-  IMaterial,
-  InitialTemplate,
+  IStage,
+  IStagePart,
   IUser,
   Journey,
   Material,
+  SentenceItem,
+  Stage,
+  StagePart,
+  UserActions,
 } from "../../../models/_index";
 import { ObjectId, WithId } from "mongodb";
 import { BaseMaterialTypeHelper } from "./type-helpers/base";
@@ -14,15 +20,37 @@ import {
   AnalyzingContext,
   AnswerContext,
   FeedbackContext,
-  MaterialGenerationContext,
   MaterialFlowContext,
+  MaterialGenerationContext,
+  StageGeneratingContext,
 } from "./ctx";
 import { MaterialGenerationHelper } from "./generation";
 import { BrocaTypes } from "../../../types";
-import { ChatGeneration } from "../../ai";
+import {
+  ChatGeneration,
+  ImageGeneration,
+  TranscriptionGeneration,
+} from "../../ai";
 import { undefinedOrValue } from "../../../utils/validators";
-import { randomString } from "../../../utils/random";
 import { WithGQLID } from "../../db";
+import { StageDocumentationManager } from "../documentation";
+import { TermManager } from "../term";
+import { msg, PromptBuilder } from "../../../utils/prompter";
+import {
+  describeMaterial,
+  instructions,
+  journeySummary,
+  progressSummary,
+} from "../../prompts";
+import { GqlTypes } from "../../../utils/gql-types";
+import {
+  ChatGenerationContext,
+  ChatGenerationContextWithGlobalAssistant,
+} from "../../ai/chat/base";
+import { AIModel } from "../../../types/ctx";
+import { AIModels } from "../../../utils/constants";
+import { LanguageHelper } from "../../language";
+import { StorageService } from "../../storage";
 
 export class ProgressHelper {
   private static analyzingMaterials: {
@@ -36,37 +64,47 @@ export class ProgressHelper {
     if (updates.add) {
       array.push(...updates.add);
     }
+
+    let removedCount = 0;
+
     if (updates.remove) {
-      array.push(...updates.remove);
+      for (const index of updates.remove) {
+        array.splice(index - removedCount, 1);
+        removedCount++;
+      }
     }
+
     if (updates.replace) {
       for (const replace of updates.replace) {
-        const index = array.findIndex((item) => item === replace[0]);
-        if (index !== -1) {
-          array[index] = replace[1];
-        } else {
-          array.push(replace[1]);
-        }
+        array[replace.index - removedCount] = replace.replace;
       }
     }
 
     return array;
   }
 
-  private static async createGeneratingMaterial(args: {
-    metadata?: BrocaTypes.Material.MaterialMetadata;
+  public static async createGeneratingMaterial(args: {
+    type: BrocaTypes.Material.MaterialType;
+    improves: string[];
+    measures: string[];
+    instructions: string;
     journey: WithId<IJourney>;
-    pathID: string;
+    stage: WithId<IStage>;
+    part: ObjectId;
   }) {
     const mat = await Material.insertOne({
       compStatus: "NOT_STARTED",
       convStatus: "NOT_STARTED",
       genStatus: "CREATING",
       feedbackStatus: "NOT_STARTED",
-      metadata: args.metadata,
       journey_ID: args.journey._id,
       user_ID: args.journey.user_ID,
-      pathID: args.pathID,
+      stage_ID: args.stage._id,
+      part_ID: args.part,
+      type: args.type,
+      improves: args.improves,
+      measures: args.measures,
+      instructions: args.instructions,
     });
 
     if (!mat) {
@@ -76,146 +114,146 @@ export class ProgressHelper {
     return mat;
   }
 
-  static async getInitialMaterials(input: {
-    journeyId: ObjectId;
-    user: WithId<IUser>;
-  }): Promise<WithGQLID<IMaterial>[]> {
-    const journey = await Journey.findById(input.journeyId);
-    if (!journey) {
-      throw new Error("Journey not found");
-    }
+  // static async getInitialMaterials(input: {
+  //   journeyId: ObjectId;
+  //   user: WithId<IUser>;
+  // }): Promise<WithGQLID<IMaterial>[]> {
+  //   const journey = await Journey.findById(input.journeyId);
+  //   if (!journey) {
+  //     throw new Error("Journey not found");
+  //   }
 
-    const initialTemplate = await InitialTemplate.findOne({
-      language: journey.to,
-      aiModel: journey.chatModel,
-    });
+  //   const initialTemplate = await InitialTemplate.findOne({
+  //     language: journey.to,
+  //     aiModel: journey.chatModel,
+  //   });
 
-    if (!initialTemplate) {
-      return await ProgressHelper.createMaterialForInitial(input);
-    }
+  //   if (!initialTemplate) {
+  //     return await ProgressHelper.createMaterialForInitial(input);
+  //   }
 
-    const materials: WithGQLID<IMaterial>[] = [];
+  //   const materials: WithGQLID<IMaterial>[] = [];
 
-    for (const material of initialTemplate.materials) {
-      const inserted = await Material.insertOne({
-        journey_ID: journey._id,
-        pathID: "initial",
-        user_ID: journey.user_ID,
-        compStatus: "NOT_STARTED",
-        genStatus: "COMPLETED",
-        convStatus: "NOT_STARTED",
-        feedbackStatus: "NOT_STARTED",
-        metadata: material.metadata,
-        details: material.details,
-      });
+  //   for (const material of initialTemplate.materials) {
+  //     const inserted = await Material.insertOne({
+  //       journey_ID: journey._id,
+  //       pathID: "initial",
+  //       user_ID: journey.user_ID,
+  //       compStatus: "NOT_STARTED",
+  //       genStatus: "COMPLETED",
+  //       convStatus: "NOT_STARTED",
+  //       feedbackStatus: "NOT_STARTED",
+  //       metadata: material.metadata,
+  //       details: material.details,
+  //     });
 
-      if (inserted) {
-        materials.push(inserted);
-      }
-    }
+  //     if (inserted) {
+  //       materials.push(inserted);
+  //     }
+  //   }
 
-    return materials;
-  }
+  //   return materials;
+  // }
 
-  static async createMaterialForInitial(input: {
-    journeyId: ObjectId;
-    user: WithId<IUser>;
-  }): Promise<WithGQLID<IMaterial>[]> {
-    const journey = await Journey.findById(input.journeyId);
-    if (!journey) {
-      throw new Error("Journey not found");
-    }
+  // static async createMaterialForInitial(input: {
+  //   journeyId: ObjectId;
+  //   user: WithId<IUser>;
+  // }): Promise<WithGQLID<IMaterial>[]> {
+  //   const journey = await Journey.findById(input.journeyId);
+  //   if (!journey) {
+  //     throw new Error("Journey not found");
+  //   }
 
-    let path = journey.paths.initial;
+  //   let path = journey.paths.initial;
 
-    if (!path) {
-      throw new Error("Path not found");
-    }
+  //   if (!path) {
+  //     throw new Error("Path not found");
+  //   }
 
-    const flowCtx = new MaterialFlowContext({
-      journey,
-      pathID: "initial",
-      user: input.user,
-    });
+  //   const flowCtx = new MaterialFlowContext({
+  //     journey,
+  //     pathID: "initial",
+  //     user: input.user,
+  //   });
 
-    const ctxs = [
-      new MaterialGenerationContext({
-        reason: "initial",
-        flow: flowCtx,
-        requiredMaterial: {
-          type: "QUIZ",
-          description:
-            "This is the initial quiz. Before the user starts to learn, we don't have any information about user level in the language. So we need to ask questions to determine the user level. For this, we will ask only 2 questions: TEXT_INPUT_WRITE, RECORD. This allows user to answer generically and we can determine the user level.",
-        },
-      }),
-      new MaterialGenerationContext({
-        reason: "initial",
-        flow: flowCtx,
-        requiredMaterial: {
-          type: "CONVERSATION",
-        },
-      }),
-      new MaterialGenerationContext({
-        reason: "initial",
-        flow: flowCtx,
-        requiredMaterial: {
-          type: "STORY",
-        },
-      }),
-    ];
+  //   const ctxs = [
+  //     new MaterialGenerationContext({
+  //       reason: "initial",
+  //       flow: flowCtx,
+  //       requiredMaterial: {
+  //         type: "QUIZ",
+  //         description:
+  //           "This is the initial quiz. Before the user starts to learn, we don't have any information about user level in the language. So we need to ask questions to determine the user level. For this, we will ask only 2 questions: TEXT_INPUT_WRITE, RECORD. This allows user to answer generically and we can determine the user level.",
+  //       },
+  //     }),
+  //     new MaterialGenerationContext({
+  //       reason: "initial",
+  //       flow: flowCtx,
+  //       requiredMaterial: {
+  //         type: "CONVERSATION",
+  //       },
+  //     }),
+  //     new MaterialGenerationContext({
+  //       reason: "initial",
+  //       flow: flowCtx,
+  //       requiredMaterial: {
+  //         type: "STORY",
+  //       },
+  //     }),
+  //   ];
 
-    const template: BrocaTypes.Material.Material[] = [];
+  //   const template: BrocaTypes.Material.Material[] = [];
 
-    const promises: Promise<void>[] = [];
+  //   const promises: Promise<void>[] = [];
 
-    for (const ctx of ctxs) {
-      MaterialGenerationHelper.gen(ctx);
-      promises.push(ctx.waitUntil("completed"));
-    }
+  //   for (const ctx of ctxs) {
+  //     MaterialGenerationHelper.gen(ctx);
+  //     promises.push(ctx.waitUntil("completed"));
+  //   }
 
-    await Promise.all(promises);
+  //   await Promise.all(promises);
 
-    for (const ctx of ctxs) {
-      template.push({
-        metadata: ctx.requiredMaterial.metadata!,
-        details: ctx.requiredMaterial.details!,
-      });
-    }
+  //   for (const ctx of ctxs) {
+  //     template.push({
+  //       metadata: ctx.requiredMaterial.metadata!,
+  //       details: ctx.requiredMaterial.details!,
+  //     });
+  //   }
 
-    await InitialTemplate.insertOne({
-      language: journey.to,
-      level: 1,
-      materials: template,
-      aiModel: journey.chatModel,
-    });
+  //   await InitialTemplate.insertOne({
+  //     language: journey.to,
+  //     level: 1,
+  //     materials: template,
+  //     aiModel: journey.chatModel,
+  //   });
 
-    await Material.deleteMany({
-      journey_ID: journey._id,
-      pathID: "initial",
-      user_ID: journey.user_ID,
-    });
+  //   await Material.deleteMany({
+  //     journey_ID: journey._id,
+  //     pathID: "initial",
+  //     user_ID: journey.user_ID,
+  //   });
 
-    const materials: WithGQLID<IMaterial>[] = [];
+  //   const materials: WithGQLID<IMaterial>[] = [];
 
-    for (const material of template) {
-      const inserted = await Material.insertOne({
-        journey_ID: journey._id,
-        pathID: "initial",
-        user_ID: journey.user_ID,
-        compStatus: "NOT_STARTED",
-        genStatus: "COMPLETED",
-        convStatus: "NOT_STARTED",
-        feedbackStatus: "NOT_STARTED",
-        metadata: material.metadata,
-        details: material.details,
-      });
-      if (inserted) {
-        materials.push(inserted);
-      }
-    }
+  //   for (const material of template) {
+  //     const inserted = await Material.insertOne({
+  //       journey_ID: journey._id,
+  //       pathID: "initial",
+  //       user_ID: journey.user_ID,
+  //       compStatus: "NOT_STARTED",
+  //       genStatus: "COMPLETED",
+  //       convStatus: "NOT_STARTED",
+  //       feedbackStatus: "NOT_STARTED",
+  //       metadata: material.metadata,
+  //       details: material.details,
+  //     });
+  //     if (inserted) {
+  //       materials.push(inserted);
+  //     }
+  //   }
 
-    return materials;
-  }
+  //   return materials;
+  // }
 
   //   static async prepareAnswer(args: {
   //     answer: any;
@@ -285,9 +323,7 @@ export class ProgressHelper {
   //             throw new Error("Audio not found");
   //           }
 
-
   //           const transcription = await AzureVoice.speechToText(buffer);
-
 
   //           const message = msg();
 
@@ -318,128 +354,145 @@ export class ProgressHelper {
   //     return answer;
   //   }
 
-  /**
-   * true indicates that path is completed
-   *
-   */
-  static async handleInitialAnswer(ctx: AnalyzingContext): Promise<{
-    next: "CREATING_NEW" | "INITIAL_END" | "INITIAL_CONTINUE";
-    newPath: string | null;
-    newMaterial: ObjectId | null;
-  }> {
-    try {
-      const hasUnAnsweredMaterials = await this.hasUnAnsweredMaterials(
-        ctx.flow.journey._id,
-        ctx.flow.pathID,
-        ctx.flow.user._id
-      );
+  // /**
+  //  * true indicates that path is completed
+  //  *
+  //  */
+  // static async handleInitialAnswer(ctx: AnalyzingContext): Promise<{
+  //   next: "CREATING_NEW" | "INITIAL_END" | "INITIAL_CONTINUE";
+  //   newPath: string | null;
+  //   newMaterial: ObjectId | null;
+  // }> {
+  //   try {
+  //     const hasUnAnsweredMaterials = await this.hasUnAnsweredMaterials(
+  //       ctx.flow.journey._id,
+  //       ctx.flow.pathID,
+  //       ctx.flow.user._id
+  //     );
 
-      if (!hasUnAnsweredMaterials) {
-        await ctx.waitUntil("completed");
+  //     if (!hasUnAnsweredMaterials) {
+  //       await ctx.waitUntil("completed");
 
-        const newPathId = randomString(24);
+  //       const newPathId = randomString(24);
 
-        await ctx.updateJourney({
-          $set: {
-            "paths.initial.isActive": false,
-            "paths.initial.isMain": false,
-            [`paths.${newPathId}`]: {
-              isActive: true,
-              isMain: true,
-              type: "GENERAL",
-              name: "General",
-            },
-          },
-        });
+  //       await ctx.updateJourney({
+  //         $set: {
+  //           "paths.initial.isActive": false,
+  //           "paths.initial.isMain": false,
+  //           [`paths.${newPathId}`]: {
+  //             isActive: true,
+  //             isMain: true,
+  //             type: "GENERAL",
+  //             name: "General",
+  //           },
+  //         },
+  //       });
 
-        ctx.flow.pathID = newPathId;
+  //       ctx.flow.pathID = newPathId;
 
-        const ctxs = [
-          new MaterialGenerationContext({
-            reason: "path",
-            flow: ctx.flow,
-            requiredMaterial: {
-              type: "QUIZ",
-              material: await this.createGeneratingMaterial({
-                journey: ctx.flow.journey,
-                pathID: newPathId,
-              }),
-            },
-          }),
-          new MaterialGenerationContext({
-            reason: "path",
-            flow: ctx.flow,
-            requiredMaterial: {
-              type: "CONVERSATION",
-              material: await this.createGeneratingMaterial({
-                journey: ctx.flow.journey,
-                pathID: newPathId,
-              }),
-            },
-          }),
-          new MaterialGenerationContext({
-            reason: "path",
-            flow: ctx.flow,
-            requiredMaterial: {
-              type: "STORY",
-              material: await this.createGeneratingMaterial({
-                journey: ctx.flow.journey,
-                pathID: newPathId,
-              }),
-            },
-          }),
-        ];
+  //       const ctxs = [
+  //         new MaterialGenerationContext({
+  //           reason: "path",
+  //           flow: ctx.flow,
+  //           requiredMaterial: {
+  //             type: "QUIZ",
+  //             material: await this.createGeneratingMaterial({
+  //               journey: ctx.flow.journey,
+  //               pathID: newPathId,
+  //             }),
+  //           },
+  //         }),
+  //         new MaterialGenerationContext({
+  //           reason: "path",
+  //           flow: ctx.flow,
+  //           requiredMaterial: {
+  //             type: "CONVERSATION",
+  //             material: await this.createGeneratingMaterial({
+  //               journey: ctx.flow.journey,
+  //               pathID: newPathId,
+  //             }),
+  //           },
+  //         }),
+  //         new MaterialGenerationContext({
+  //           reason: "path",
+  //           flow: ctx.flow,
+  //           requiredMaterial: {
+  //             type: "STORY",
+  //             material: await this.createGeneratingMaterial({
+  //               journey: ctx.flow.journey,
+  //               pathID: newPathId,
+  //             }),
+  //           },
+  //         }),
+  //       ];
 
-        for (const ctx of ctxs) {
-          MaterialGenerationHelper.gen(ctx);
-        }
+  //       for (const ctx of ctxs) {
+  //         MaterialGenerationHelper.gen(ctx);
+  //       }
 
-        return {
-          next: "INITIAL_END",
-          newPath: newPathId,
-          newMaterial: null,
-        };
-      } else {
-        return {
-          next: "INITIAL_CONTINUE",
-          newPath: null,
-          newMaterial: null,
-        };
-      }
-    } catch (e) {
-      throw e;
-    }
-  }
+  //       return {
+  //         next: "INITIAL_END",
+  //         newPath: newPathId,
+  //         newMaterial: null,
+  //       };
+  //     } else {
+  //       return {
+  //         next: "INITIAL_CONTINUE",
+  //         newPath: null,
+  //         newMaterial: null,
+  //       };
+  //     }
+  //   } catch (e) {
+  //     throw e;
+  //   }
+  // }
 
-  static async hasUnAnsweredMaterials(
-    journeyId: ObjectId,
-    pathID: string,
-    user_ID: ObjectId
-  ) {
-    const materials = await Material.find({
-      pathID: pathID,
-      compStatus: "NOT_STARTED",
-      user_ID: user_ID,
-      journey_ID: journeyId,
-    });
-    return materials.length > 0;
+  // static async hasUnAnsweredMaterials(
+  //   journeyId: ObjectId,
+  //   pathID: string,
+  //   user_ID: ObjectId
+  // ) {
+  //   const materials = await Material.find({
+  //     pathID: pathID,
+  //     compStatus: "NOT_STARTED",
+  //     user_ID: user_ID,
+  //     journey_ID: journeyId,
+  //   });
+  //   return materials.length > 0;
+  // }
+
+  static async createInitialStage(
+    journey: WithGQLID<IJourney>,
+    user: WithGQLID<IUser>
+  ): Promise<WithGQLID<IStage>> {
+    return await this.generateStage(journey, user, true);
   }
 
   static async answerMaterial(
-    user: WithId<IUser>,
+    user: WithGQLID<IUser>,
     input: {
+      stageId: ObjectId;
+      partId: ObjectId;
       materialId: ObjectId;
       answer: any;
     }
   ): Promise<{
-    next: "CREATING_NEW" | "INITIAL_END" | "INITIAL_CONTINUE";
-    newPath: string | null;
-    newMaterial: ObjectId | null;
+    currentStage: WithGQLID<IStage> | null;
+    newStage: WithGQLID<IStage> | null;
+    nextPart: WithGQLID<IStagePart> | null;
   }> {
+    const stage = await Stage.findById(input.stageId);
+    if (!stage) {
+      throw new Error("Stage not found");
+    }
 
     const material = await Material.findById(input.materialId);
     if (!material) {
       throw new Error("Material not found");
+    }
+
+    if (!material.stage_ID.equals(stage._id)) {
+      throw new Error("Material is not in the stage");
     }
 
     const journey = await Journey.findById(material.journey_ID);
@@ -447,57 +500,205 @@ export class ProgressHelper {
       throw new Error("Journey not found");
     }
 
+    const part = await StagePart.findById(input.partId);
+    if (!part) {
+      throw new Error("Part not found");
+    }
+
     const flowCtx = new MaterialFlowContext({
       journey,
-      pathID: material.pathID,
+      stage,
       user,
       answeredMaterial: material,
       rawAnswer: input.answer,
+      part,
     });
 
     await BaseMaterialTypeHelper.prepareAnswer(new AnswerContext(flowCtx));
 
-    const isInitial = journey.paths[material.pathID].type === "INITIAL";
+    // const isInitial = journey.paths[material.pathID].type === "INITIAL";
 
     const ctx = new AnalyzingContext(flowCtx);
 
-    this.analyze(ctx);
+    let newStage: WithGQLID<IStage> | null = null;
+    let currentStage: WithGQLID<IStage> | null = null;
 
-    if (isInitial) {
-      return this.handleInitialAnswer(ctx);
-    }
+    const analyzing = this.analyze(ctx);
+
+    await analyzing;
+
+    // if (isInitial) {
+    //   return this.handleInitialAnswer(ctx);
+    // }
 
     FeedbackHelper.handleAnswer(new FeedbackContext(flowCtx));
 
-    const newMaterial = await this.createGeneratingMaterial({
-      journey: journey,
-      pathID: material.pathID,
-    });
-
-    MaterialGenerationHelper.gen(
-      new MaterialGenerationContext({
-        reason: "path",
-        flow: flowCtx,
-        requiredMaterial: {
-          type: material.details!.type,
-          material: newMaterial,
+    // createdAt asc next 2 parts
+    const nextParts = await StagePart.findOne(
+      {
+        stage_ID: stage._id,
+        createdAt: {
+          $gt: part.createdAt,
         },
-      })
+      },
+      {
+        sort: {
+          createdAt: 1,
+        },
+      }
     );
 
+    if (nextParts) {
+      await this._prepareNextPart(nextParts, flowCtx);
+
+      const updatedPart = await StagePart.findByIdAndUpdate(nextParts._id, {
+        $set: {
+          hidden: false,
+        },
+      });
+
+      if (!updatedPart) {
+        throw new Error("Part not found");
+      }
+
+      return {
+        newStage: newStage,
+        currentStage: currentStage,
+        nextPart: updatedPart,
+      };
+    } else {
+      newStage = await this.generateStage(journey, user, false);
+
+      currentStage = await Stage.findByIdAndUpdate(stage._id, {
+        $set: {
+          status: "COMPLETED",
+          levelsOnFinish: ctx.flow.journey.progress.level,
+        },
+      });
+
+      if (!currentStage) {
+        throw new Error("Stage not found");
+      }
+
+      ctx.flow.stage = currentStage;
+    }
+
     return {
-      next: "CREATING_NEW",
-      newPath: null,
-      newMaterial: newMaterial._id,
+      newStage: newStage,
+      currentStage: currentStage,
+      nextPart: null,
     };
+
+    // const newMaterial = await this.createGeneratingMaterial({
+    //   journey: journey,
+    //   pathID: material.pathID,
+    //   type: material!.type,
+    // });
+
+    // MaterialGenerationHelper.gen(
+    //   new MaterialGenerationContext({
+    //     reason: "path",
+    //     flow: flowCtx,
+    //     requiredMaterial: {
+    //       material: newMaterial,
+    //     },
+    //   })
+    // );
+
+    // return {
+    //   next: "CREATING_NEW",
+    //   newPath: null,
+    //   newMaterial: newMaterial._id,
+    // };
+  }
+
+  static async _prepareNextPart(
+    part: WithGQLID<IStagePart>,
+    flow: MaterialFlowContext
+  ) {
+    switch (part.type) {
+      case "TASK":
+        const mat = part.material.material_ID;
+        if (!mat) {
+          throw new Error("Material not found");
+        }
+
+        const material = await Material.findById(mat);
+        if (!material) {
+          throw new Error("Material not found");
+        }
+
+        const ctx = new MaterialFlowContext({
+          journey: flow.journey,
+          stage: flow.stage,
+          user: flow.user,
+          part: part,
+        });
+
+        MaterialGenerationHelper.gen(
+          new MaterialGenerationContext({
+            flow: ctx,
+            requiredMaterial: material,
+            reason: "next",
+          })
+        );
+
+        break;
+
+      case "DOCUMENTATION":
+        const doc = part.documentation.ref_ID;
+
+        if (!doc) {
+          throw new Error("Doc not found");
+        }
+
+        const docItem = await Docs.findById(doc);
+        if (!docItem) {
+          throw new Error("Doc not found");
+        }
+
+        const generatedDoc = await StageDocumentationManager.genUserDoc(
+          flow.journey,
+          part,
+          docItem
+        );
+
+        if (!generatedDoc) {
+          throw new Error("Doc not generated");
+        }
+
+        break;
+      case "SENTENCES":
+      // for (const sentence of part.sentences) {
+      //   if (!sentence.ref_ID) {
+      //     throw new Error("Sentence item not found");
+      //   }
+
+      //   const sentenceItem = await SentenceItem.findById(sentence.ref_ID!);
+
+      //   if (!sentenceItem) {
+      //     throw new Error("Sentence item not created");
+      //   }
+
+      //   TermManager.resolveSentence(
+      //     sentence.sentence,
+      //     sentence.instructions,
+      //     flow.journey,
+      //     sentenceItem
+      //   );
+      // }
+
+      case "WORDS":
+        break;
+    }
   }
 
   static async analyze(ctx: AnalyzingContext) {
-    const pathId = ctx.flow.pathID;
+    const stageId = ctx.flow.stage._id.toString();
     try {
-      if (this.analyzingMaterials[pathId]) {
-        const existingCtx = this.analyzingMaterials[pathId];
-        await existingCtx.waitUntil("completed");
+      if (this.analyzingMaterials[stageId]) {
+        const existingCtx = this.analyzingMaterials[stageId];
+        await existingCtx.waitUntil("generated");
       }
 
       ctx.startGeneration();
@@ -505,32 +706,32 @@ export class ProgressHelper {
       const prompt = await ctx.getAnalysisPrompt();
 
       const aiRes = await new ChatGeneration(
-        "progress",
+        "analyzer",
         prompt,
         ctx
       ).generate();
 
-      const level = undefinedOrValue(aiRes.level, null);
+      const newLevel = undefinedOrValue(aiRes.newLevel, null);
 
       const pathUpdates: any = {};
 
-      if (level) {
-        Object.keys(level).forEach((key) => {
-          pathUpdates[`progress.level.${key}` as string] = level![
+      if (newLevel) {
+        Object.keys(newLevel).forEach((key) => {
+          pathUpdates[`progress.level.${key}` as string] = newLevel![
             key as keyof BrocaTypes.Progress.PathLevel
           ] as any;
         });
       }
 
-      const observations = undefinedOrValue(aiRes.observations, null);
+      const general = undefinedOrValue(aiRes.general, null);
 
-      if (observations) {
-        const updatedObservations = this.updateArray(
-          ctx.flow.journey.progress.observations,
-          observations
+      if (general) {
+        const updatedGeneral = this.updateArray(
+          ctx.flow.journey.progress.general,
+          general
         );
 
-        pathUpdates["progress.observations"] = updatedObservations;
+        pathUpdates["progress.general"] = updatedGeneral;
       }
 
       const strongPoints = undefinedOrValue(aiRes.strongPoints, null);
@@ -561,12 +762,638 @@ export class ProgressHelper {
         });
       }
 
+      const notes = undefinedOrValue(aiRes.notes, null);
+
+      if (notes) {
+        const updatedNotes = ctx.flow.stage.notes ?? [];
+
+        updatedNotes.push(...notes);
+
+        await Stage.findByIdAndUpdate(ctx.flow.stage._id, {
+          $set: { notes: updatedNotes },
+        });
+      }
+
+      const successRate = undefinedOrValue(aiRes.successRate, null);
+
+      if (successRate) {
+        const behavior = msg();
+
+        behavior.add("User answered material");
+
+        behavior.addKv(
+          "Material",
+          describeMaterial(ctx.flow.answeredMaterial!, true)
+        );
+
+        behavior.addKv("Success Rate", successRate);
+
+        await UserActions.insertOne({
+          stage_ID: ctx.flow.stage._id,
+          part_ID: ctx.flow.part!._id,
+          behavior: behavior.build(),
+        });
+      }
+
       await ctx.complete();
     } catch (e) {
       ctx.addError(e as Error);
       throw e;
     } finally {
-      delete this.analyzingMaterials[pathId];
+      delete this.analyzingMaterials[stageId];
     }
+  }
+
+  static getGeneratingStage(
+    journeyId: ObjectId,
+    stageId: ObjectId
+  ): StageGeneratingContext | undefined {
+    return this._generatingStages[journeyId.toString()]?.[stageId.toString()];
+  }
+
+  static _generatingStages: {
+    [journeyId: string]: {
+      [stageId: string]: StageGeneratingContext;
+    };
+  } = {};
+
+  static async generateStage(
+    journey: WithGQLID<IJourney>,
+    user: WithGQLID<IUser>,
+    isInitial: boolean
+  ) {
+    const journeyId = journey._id.toString();
+
+    if (this._generatingStages[journeyId]) {
+      const existingCtx = this._generatingStages[journeyId];
+      const promises = [];
+
+      for (const stageId in existingCtx) {
+        promises.push(existingCtx[stageId].waitUntil("generated"));
+      }
+
+      await Promise.all(promises);
+    }
+
+    const createdStage = await Stage.insertOne({
+      status: "GENERATING",
+      journey_ID: journey._id,
+      user_ID: user._id,
+      levelsOnStart: journey.progress.level,
+    });
+
+    if (!createdStage) {
+      throw new Error("Stage not created");
+    }
+
+    const stageId = createdStage._id.toString();
+
+    const ctx = new StageGeneratingContext(
+      new MaterialFlowContext({ journey, stage: createdStage, user }),
+      isInitial
+    );
+
+    if (!this._generatingStages[journeyId]) {
+      this._generatingStages[journeyId] = {};
+    }
+
+    this._generatingStages[journeyId][stageId] = ctx;
+
+    this._genStage(ctx).finally(() => {
+      delete this._generatingStages[journeyId][stageId];
+      if (Object.keys(this._generatingStages[journeyId]).length === 0) {
+        delete this._generatingStages[journeyId];
+      }
+    });
+
+    return createdStage;
+  }
+
+  static async _genStage(ctx: StageGeneratingContext) {
+    ctx.startGeneration();
+
+    const prompt = await ctx.getStagePrompt();
+
+    const aiRes = await new ChatGeneration("stager", prompt, ctx).generate();
+
+    const newStage = await this._handleNewStage(ctx, aiRes, ctx.flow.stage);
+
+    ctx.flow.stage = newStage;
+
+    await ctx.complete();
+
+    return newStage;
+  }
+
+  static async _handleNewStage(
+    ctx: StageGeneratingContext,
+    newStageData: BrocaTypes.Progress.Stage,
+    newStageObject: WithGQLID<IStage>
+  ): Promise<WithGQLID<IStage>> {
+    const { imageId } = await this._prepareNewStage(ctx, newStageData);
+
+    const newStage = await Stage.findByIdAndUpdate(newStageObject._id, {
+      $set: {
+        name: newStageData.name,
+        description: newStageData.description,
+        imagePrompt: newStageData.imagePrompt,
+        imageId: imageId,
+        status: "GENERATED",
+        focusAreas: newStageData.focusAreas,
+        focusSkills: newStageData.focusSkills,
+        includedTopics: newStageData.includedTopics,
+      },
+    });
+
+    if (!newStage) {
+      throw new Error("Stage not created");
+    }
+
+    return newStage;
+  }
+
+  static async _prepareNewStage(
+    ctx: StageGeneratingContext,
+    newStageData: BrocaTypes.Progress.Stage
+  ): Promise<{
+    imageId: string;
+  }> {
+    const parts = newStageData.parts;
+
+    const nParts = [];
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      switch (part.type) {
+        case "TASK":
+          const taskPart = part as BrocaTypes.Progress.StageTaskPart;
+
+          const partId = new ObjectId();
+
+          const material = await this.createGeneratingMaterial({
+            journey: ctx.flow.journey,
+            type: taskPart.content.type,
+            improves: taskPart.content.improves ?? [],
+            measures: taskPart.content.measures ?? [],
+            instructions: taskPart.content.instructions ?? "",
+            stage: ctx.flow.stage,
+            part: partId,
+          });
+
+          const p = await StagePart.insertOne(
+            {
+              stage_ID: ctx.flow.stage._id,
+              type: "TASK",
+
+              explanation: taskPart.explanation,
+
+              material: {
+                type: taskPart.content.type,
+                improves: taskPart.content.improves ?? [],
+                measures: taskPart.content.measures ?? [],
+                instructions: taskPart.content.instructions ?? "",
+                material_ID: material._id,
+              },
+              hidden: i !== 0,
+            },
+            partId
+          );
+
+          if (!p) {
+            throw new Error("Stage part not created");
+          }
+
+          break;
+
+        case "DOCUMENTATION":
+          const docPart = part as BrocaTypes.Progress.StageDocumentationPart;
+
+          const docReference = await Docs.insertOne({
+            journey_ID: ctx.flow.journey._id,
+            user_ID: ctx.flow.user._id,
+            genStatus: "NOT_STARTED",
+          });
+
+          if (!docReference) {
+            throw new Error("Doc reference not created");
+          }
+
+          const docP = await StagePart.insertOne({
+            stage_ID: ctx.flow.stage._id,
+            type: "DOCUMENTATION",
+            explanation: docPart.explanation,
+            hidden: i !== 0,
+            documentation: {
+              title: docPart.content.title ?? "",
+              instructions: docPart.content.instructions ?? "",
+              ref_ID: docReference._id,
+            },
+          });
+
+          if (!docP) {
+            throw new Error("Stage part not created");
+          }
+
+          break;
+
+        case "WORDS":
+          const dictPart = part as BrocaTypes.Progress.StageDictionaryPart;
+
+          const dictP = await StagePart.insertOne({
+            stage_ID: ctx.flow.stage._id,
+            type: "WORDS",
+            explanation: dictPart.explanation,
+            hidden: i !== 0,
+            words: dictPart.content.words ?? [],
+          });
+
+          if (!dictP) {
+            throw new Error("Stage part not created");
+          }
+
+          const newWords = [];
+
+          for (let i = 0; i < dictPart.content.words.length; i++) {
+            const word = dictPart.content.words[i];
+
+            const dictItem = await DictItem.insertOne({
+              part_ID: dictP._id,
+              index: i,
+              genStatus: "NOT_STARTED",
+            });
+
+            if (!dictItem) {
+              throw new Error("Dict item not created");
+            }
+
+            newWords.push({
+              ...word,
+              ref_ID: dictItem._id,
+            });
+          }
+
+          await StagePart.findByIdAndUpdate(dictP._id, {
+            $set: {
+              words: newWords,
+            },
+          });
+
+          break;
+
+        case "SENTENCE":
+          const sentencePart = part as BrocaTypes.Progress.StageSentencePart;
+
+          const sentenceP = await StagePart.insertOne({
+            stage_ID: ctx.flow.stage._id,
+            type: "SENTENCES",
+            explanation: sentencePart.explanation,
+            hidden: i !== 0,
+            sentences: sentencePart.content.sentences ?? [],
+          });
+
+          if (!sentenceP) {
+            throw new Error("Stage part not created");
+          }
+
+          const newSentences = [];
+
+          for (let i = 0; i < sentencePart.content.sentences.length; i++) {
+            const sentence = sentencePart.content.sentences[i];
+
+            const sentenceItem = await SentenceItem.insertOne({
+              part_ID: sentenceP._id,
+              index: i,
+              genStatus: "NOT_STARTED",
+            });
+
+            if (!sentenceItem) {
+              throw new Error("Sentence item not created");
+            }
+
+            newSentences.push({
+              ...sentence,
+              ref_ID: sentenceItem._id,
+            });
+          }
+
+          await StagePart.findByIdAndUpdate(sentenceP._id, {
+            $set: {
+              sentences: newSentences,
+            },
+          });
+
+          break;
+      }
+    }
+
+    // for (const part of parts) {
+    //   switch (part.type) {
+    //     case "TASK":
+    //       const taskPart = part as BrocaTypes.Progress.StageTaskPart;
+
+    //       const created = await this.createGeneratingMaterial({
+    //         journey: ctx.flow.journey,
+    //         stage: ctx.flow.stage,
+    //         type: taskPart.content.type,
+    //         improves: taskPart.content.improves ?? [],
+    //         measures: taskPart.content.measures ?? [],
+    //         instructions: taskPart.content.instructions ?? "",
+    //       });
+
+    //       if (!created) {
+    //         throw new Error("Material not created");
+    //       }
+
+    //       taskPart.content.id = created._id.toString();
+
+    //       break;
+
+    //     case "DOCUMENTATION":
+    //       const docPart = part as BrocaTypes.Progress.StageDocumentationPart;
+
+    //       const docReference = await DocReference.insertOne({
+    //         stage_ID: ctx.flow.stage._id,
+    //         title: docPart.content.title,
+    //         instructions: docPart.content.instructions,
+    //       });
+
+    //       if (!docReference) {
+    //         throw new Error("Doc reference not created");
+    //       }
+
+    //       docPart.content.id = docReference._id.toString();
+
+    //       break;
+
+    //     case "DICTIONARY":
+    //     case "SENTENCE":
+    //   }
+    // }
+
+    // const resources = newStageData.resources;
+
+    // if (resources) {
+    //   const docs = resources.docs;
+
+    //   if (docs) {
+    //     for (var i = 0; i < docs.length; i++) {
+    //       const doc = docs[i];
+    //       const docReference = await DocReference.insertOne({
+    //         stage_ID: ctx.flow.stage._id,
+    //         title: doc.title,
+    //         search: doc.search,
+    //       });
+
+    //       if (docReference) {
+    //         docs[i] = {
+    //           reference: docReference._id.toString(),
+    //           title: doc.title,
+    //           search: doc.search,
+    //         };
+    //       }
+    //     }
+    //     resources.docs = docs;
+    //   }
+    // }
+
+    // if (newStageData.tasks) {
+    //   const tasks = newStageData.tasks;
+
+    //   for (var i = 0; i < tasks.materials.length; i++) {
+    //     const material = tasks.materials[i];
+
+    //     const mat = await this.createGeneratingMaterial({
+    //       journey: ctx.flow.journey,
+    //       stage: ctx.flow.stage,
+    //       type: material.type,
+    //       improves: material.improves ?? [],
+    //       measures: material.measures ?? [],
+    //       instructions: material.instructions ?? "",
+    //     });
+
+    //     if (!mat) {
+    //       throw new Error("Material not created");
+    //     }
+
+    //     material.id = mat._id.toString();
+    //     tasks.materials[i] = material;
+
+    //     const genCtx = new MaterialGenerationContext({
+    //       flow: ctx.flow,
+    //       requiredMaterial: mat,
+    //       reason: "new stage",
+    //     });
+
+    //     MaterialGenerationHelper.gen(genCtx);
+
+    //     ctx.addPostGen(genCtx.waitUntil("completed"));
+    //   }
+
+    //   newStageData.tasks = tasks;
+    // }
+
+    if (newStageData.imagePrompt) {
+      const imageId = new ObjectId();
+      const gen = new ImageGeneration(newStageData.imagePrompt, imageId, ctx, {
+        reason: "new stage",
+      });
+
+      ctx.addPostGen(gen.generate());
+
+      return {
+        imageId: imageId.toString(),
+      };
+    } else {
+      throw new Error("Image prompt not found");
+    }
+  }
+
+  static async analyzeInitialAnswers(
+    journey: WithGQLID<IJourney>,
+    user: WithGQLID<IUser>,
+    input: GqlTypes.User.CreateJourneyInput
+  ) {
+    const ctx = new _InitialAnalyzerCtx(journey, user, input);
+
+    const builder = new PromptBuilder();
+
+    const i = instructions.analyzer;
+
+    builder.systemMessage(i.content, "assistant", i.version);
+
+    const j = await journeySummary(journey, user);
+
+    builder.userMessage(j);
+
+    const p = progressSummary(journey);
+
+    builder.userMessage(p);
+
+    const req = msg();
+
+    const toName = LanguageHelper.getEnglishName(journey.to);
+
+    const refText = input.referenceText;
+
+    req.add(
+      `When the learning journey creating, we asked some questions to the user:`
+    );
+
+    req.add(
+      "1. Read the reference text and repeat it with your own voice or write in your own alphabet."
+    );
+
+    req.add(
+      "2. Translate the reference text to your own language or describe it in your own words."
+    );
+
+    req.add("3. Introduce yourself");
+
+    req.addKv("Reference Text", refText);
+
+    req.add("User's answers:");
+
+    if (input.recording) {
+      const buffer = await StorageService.getAudio(input.recording);
+
+      const transcription = new TranscriptionGeneration(
+        buffer,
+        ctx,
+        {
+          reason: "initial_recording",
+        },
+        ctx.journey.to
+      );
+
+      const transcriptionResult = await transcription.generate();
+
+      if (transcriptionResult.analyze) {
+        const analysis = transcriptionResult.analyze;
+        const m = msg();
+
+        m.addKv("Transcription", transcriptionResult.transcription);
+        m.addKv("Analysis", (s) => {
+          Object.entries(analysis).map(([key, value]) => {
+            s.addKv(key, `${value}`);
+          });
+        });
+
+        req.addKv("1. Recording", m.build());
+      } else {
+        req.addKv("1. Recording", transcriptionResult.transcription);
+      }
+    } else if (input.repating) {
+      req.addKv("1. Repating", input.repating);
+    } else {
+      req.add(`1. User marked they can't read the reference text`);
+    }
+
+    if (input.description) {
+      req.addKv("2. Description", input.description);
+    } else {
+      req.add(
+        `2. User marked they can't read ${toName} or translate the reference text`
+      );
+    }
+
+    if (input.introduction) {
+      req.addKv("3. Introduction", input.introduction);
+    } else {
+      req.add(
+        `3. User marked they can't introduce themselves or they can't write in ${toName}`
+      );
+    }
+
+    builder.userMessage(req.build());
+
+    const gen = new ChatGeneration<"analyzer">("analyzer", builder, ctx);
+
+    const aiRes = await gen.generate();
+
+    const newLevel = undefinedOrValue(aiRes.newLevel, null);
+
+    const pathUpdates: any = {};
+
+    if (newLevel) {
+      Object.keys(newLevel).forEach((key) => {
+        pathUpdates[`progress.level.${key}` as string] = newLevel![
+          key as keyof BrocaTypes.Progress.PathLevel
+        ] as any;
+      });
+    }
+
+    const general = undefinedOrValue(aiRes.general, null);
+
+    if (general) {
+      const updatedGeneral = this.updateArray(
+        journey.progress.general ?? [],
+        general
+      );
+
+      pathUpdates["progress.general"] = updatedGeneral;
+    }
+
+    const strongPoints = undefinedOrValue(aiRes.strongPoints, null);
+
+    if (strongPoints) {
+      const updatedStrongPoints = this.updateArray(
+        journey.progress.strongPoints ?? [],
+        strongPoints
+      );
+
+      pathUpdates["progress.strongPoints"] = updatedStrongPoints;
+    }
+
+    const weakPoints = undefinedOrValue(aiRes.weakPoints, null);
+
+    if (weakPoints) {
+      const updatedWeakPoints = this.updateArray(
+        journey.progress.weakPoints ?? [],
+        weakPoints
+      );
+
+      pathUpdates["progress.weakPoints"] = updatedWeakPoints;
+    }
+
+    let newJourney: WithGQLID<IJourney> | null = journey;
+
+    if (Object.keys(pathUpdates).length > 0) {
+      newJourney = await Journey.findByIdAndUpdate(journey._id, {
+        $set: pathUpdates,
+      });
+      if (!newJourney) {
+        throw new Error("Journey not updated");
+      }
+    }
+
+    await ctx.complete();
+
+    return newJourney;
+  }
+}
+
+class _InitialAnalyzerCtx extends ChatGenerationContextWithGlobalAssistant {
+  public get language(): string {
+    return this.journey.to;
+  }
+
+  toJSON() {
+    return {
+      journey: this.journey._id,
+      user: this.user._id,
+      input: this.input,
+    };
+  }
+
+  constructor(
+    public readonly journey: WithGQLID<IJourney>,
+    public readonly user: WithGQLID<IUser>,
+    public readonly input: GqlTypes.User.CreateJourneyInput
+  ) {
+    super("analyzer", "initial");
+  }
+
+  public get chatModel() {
+    return this.journey.chatModel as keyof typeof AIModels.chat;
   }
 }

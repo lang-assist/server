@@ -1,18 +1,21 @@
 import { ObjectId, WithId } from "mongodb";
 import crypto from "crypto";
 import {
+  Docs,
   DocSearch,
   DocTemplate,
+  IDocs,
   IDocTemplate,
   IJourney,
+  IStagePart,
   IUserDoc,
   UserDoc,
-  Voices,
 } from "../../models/_index";
-import { instructions } from "../prompts";
+import { instructions as mainInstructions } from "../prompts";
 import { VectorStore } from "../vectors";
 import {
   ChatGeneration,
+  ChatGenerationContext,
   ChatGenerationContextWithGlobalAssistant,
 } from "../ai/chat/base";
 import { BrocaTypes } from "../../types";
@@ -22,12 +25,14 @@ import { undefinedOrValue } from "../../utils/validators";
 import { MessageBuilder, msg, PromptBuilder } from "../../utils/prompter";
 import { AIModels } from "../../utils/constants";
 import { VoiceManager } from "../voice";
+import { WithGQLID } from "../db";
+import { AIError } from "../../utils/ai-types";
 
 function hash(text: string, aiModel: string): string {
   return crypto.createHash("md5").update(`${text}-${aiModel}`).digest("hex");
 }
 
-class DocumentationCtx extends ChatGenerationContextWithGlobalAssistant {
+class GlobalDocumentationCtx extends ChatGenerationContextWithGlobalAssistant {
   toJSON() {
     return {
       ...super.toJSON(),
@@ -72,15 +77,16 @@ class DocumentationCtx extends ChatGenerationContextWithGlobalAssistant {
     public readonly journey: WithId<IJourney>,
     public searchTerm: string,
     public title: string,
-    public searchHash: string
+    public searchHash: string,
+    public generatingDoc: WithId<IDocTemplate> | null = null
   ) {
     super("documentation", "documentation");
   }
 }
 
-export class DocumentationManager {
+export class GlobalDocumentationManager {
   private static _preparingDocuments: {
-    [key: string]: DocumentationCtx;
+    [key: string]: GlobalDocumentationCtx;
   } = {};
 
   static async addDocToUser(
@@ -133,7 +139,7 @@ export class DocumentationManager {
       return await this.addDocToUser(existingDoc.doc_ID, input.journey);
     }
 
-    const ctx = new DocumentationCtx(
+    const ctx = new GlobalDocumentationCtx(
       input.journey,
       input.searchTerm,
       input.title,
@@ -176,7 +182,7 @@ export class DocumentationManager {
   }
 
   private static async _findOrCreateDocumentation(
-    ctx: DocumentationCtx
+    ctx: GlobalDocumentationCtx
   ): Promise<void> {
     ctx.startGeneration();
 
@@ -196,7 +202,7 @@ export class DocumentationManager {
 
     const builder = new PromptBuilder();
 
-    const inst = instructions.documentation;
+    const inst = mainInstructions.documentation;
 
     builder.systemMessage(inst.content, "assistant", inst.version, {
       cache: true,
@@ -284,6 +290,7 @@ export class DocumentationManager {
     const createdDoc = await DocTemplate.insertOne({
       aiModel: ctx.journey.chatModel,
       language: ctx.journey.to,
+      global: true,
       ...aiResult.newDoc,
     });
 
@@ -315,7 +322,7 @@ export class DocumentationManager {
   }
 
   private static async modifyDocAndCacheVector(
-    ctx: DocumentationCtx,
+    ctx: GlobalDocumentationCtx,
     vectorStore: VectorStore<{
       summary: string;
     }>,
@@ -332,10 +339,9 @@ export class DocumentationManager {
 
     const promises: Promise<any>[] = modified.promises;
 
-    const updated = await DocTemplate.updateOne(
-      { _id: docId },
-      { $set: { explanations: modified.explanations } }
-    );
+    const updated = await DocTemplate.findByIdAndUpdate(docId, {
+      $set: { explanations: modified.explanations },
+    });
 
     if (!updated) {
       throw new Error("Document not found");
@@ -350,8 +356,8 @@ export class DocumentationManager {
     return promises;
   }
 
-  private static _recursiveUpdate(
-    ctx: DocumentationCtx,
+  public static _recursiveUpdate(
+    ctx: ChatGenerationContext,
     input: {
       explanations: BrocaTypes.Documentation.Explanation[];
     }
@@ -423,5 +429,127 @@ export class DocumentationManager {
       explanations,
       promises,
     };
+  }
+}
+
+class StageDocumentationCtx extends ChatGenerationContextWithGlobalAssistant {
+  public generatingDoc: WithGQLID<IDocs> | null = null;
+
+  public constructor(
+    public readonly journey: WithId<IJourney>,
+    public title: string,
+    public instructions: string
+  ) {
+    super("documentation", "documentation");
+  }
+
+  public get chatModel(): keyof typeof AIModels.chat {
+    return this.journey.chatModel! as keyof typeof AIModels.chat;
+  }
+
+  public get language(): string {
+    return this.journey.to;
+  }
+}
+
+export class StageDocumentationManager {
+  static _generatingRefs: {
+    [key: string]: StageDocumentationCtx;
+  } = {};
+
+  static async genUserDoc(
+    journey: WithId<IJourney>,
+    part: WithGQLID<IStagePart>,
+    generatingDoc: WithGQLID<IDocs>
+  ): Promise<WithGQLID<IDocs>> {
+    const refId = generatingDoc._id.toHexString();
+
+    if (this._generatingRefs[refId]) {
+      await this._generatingRefs[refId].waitUntil("generated");
+      return this._generatingRefs[refId].generatingDoc!;
+    }
+
+    try {
+      const {
+        documentation: { title, instructions },
+      } = part;
+
+      const builder = new PromptBuilder();
+
+      const inst = mainInstructions.documentation;
+
+      builder.systemMessage(inst.content, "assistant", inst.version, {
+        cache: true,
+      });
+
+      const voicesMsg = await GlobalDocumentationManager.getTenVoiceMessage(
+        journey.to
+      );
+
+      builder.systemMessage(voicesMsg, "assistant", 1, {
+        cache: true,
+      });
+
+      const inputMsg = msg();
+
+      inputMsg.addKv("Language", msg(`\`\`\`${journey.to}\`\`\``));
+      inputMsg.addKv("Title", msg(`\`\`\`${title}\`\`\``));
+      inputMsg.addKv("Instructions", msg(`\`\`\`${instructions}\`\`\``));
+
+      builder.userMessage(inputMsg, {
+        cache: false,
+      });
+
+      const ctx = new StageDocumentationCtx(journey, title, instructions);
+
+      this._generatingRefs[refId] = ctx;
+
+      ctx.startGeneration();
+
+      const generation = new ChatGeneration<"documentation">(
+        "documentation",
+        builder,
+        ctx
+      );
+
+      const aiResult = await generation.generate();
+
+      const newd = undefinedOrValue(aiResult.newDoc, null);
+
+      if (!newd) {
+        const error = new AIError("Failed to generate user doc");
+        ctx.addError(error);
+        throw error;
+      }
+
+      const updatedData = GlobalDocumentationManager._recursiveUpdate(ctx, {
+        explanations: newd.explanations,
+      });
+
+      ctx.addPostGen(...updatedData.promises);
+
+      const updatedDoc = await Docs.findByIdAndUpdate(generatingDoc._id, {
+        $set: {
+          explanations: updatedData.explanations,
+          genStatus: "GENERATED",
+        },
+      });
+
+      if (!updatedDoc) {
+        const error = new AIError("Failed to insert user doc");
+        ctx.addError(error);
+        throw error;
+      }
+
+      ctx.generatingDoc = updatedDoc;
+
+      await ctx.complete();
+
+      return updatedDoc;
+    } catch (e) {
+      throw e;
+    } finally {
+      delete this._generatingRefs[refId];
+    }
   }
 }

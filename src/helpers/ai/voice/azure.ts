@@ -5,9 +5,9 @@ import { randomString } from "../../../utils/random";
 import { SpeechGeneration, TranscriptionGeneration } from "./base";
 import { BrocaTypes } from "../../../types";
 import { AIModel } from "../../../types/ctx";
+import { AzureRes } from "../../../models/_index";
 
 export class AzureHelper {
-  static speechConfig = speechConfig();
   static token: string | undefined = undefined;
 
   static async getAuthToken() {
@@ -153,13 +153,13 @@ export class AzureHelper {
       counts,
     };
   }
-}
 
-function speechConfig() {
-  return sdk.SpeechConfig.fromSubscription(
-    process.env.AZURE_SPEECH_TOKEN!,
-    process.env.AZURE_SPEECH_REGION!
-  );
+  static speechConfig() {
+    return sdk.SpeechConfig.fromSubscription(
+      process.env.AZURE_SPEECH_TOKEN!,
+      process.env.AZURE_SPEECH_REGION!
+    );
+  }
 }
 
 export class AzureSTT extends AIModel<TranscriptionGeneration> {
@@ -220,12 +220,20 @@ export class AzureSTT extends AIModel<TranscriptionGeneration> {
 
     pronunciationAssessmentConfig.enableProsodyAssessment = true;
 
+    const speechConfig = AzureHelper.speechConfig();
+
+    speechConfig.speechRecognitionLanguage = gen.language.replace("_", "-");
+
     const speechRecognizer = new sdk.SpeechRecognizer(
-      AzureHelper.speechConfig,
+      speechConfig,
       audioConfig
     );
 
+    pronunciationAssessmentConfig.phonemeAlphabet = "IPA";
+
     pronunciationAssessmentConfig.applyTo(speechRecognizer);
+
+    console.log(speechRecognizer.properties);
 
     let duration = 0;
 
@@ -237,6 +245,12 @@ export class AzureSTT extends AIModel<TranscriptionGeneration> {
         (result) => {
           switch (result.reason) {
             case sdk.ResultReason.RecognizedSpeech:
+              AzureRes.insertOne({
+                json: JSON.parse(result.json),
+                text: result.text,
+                data: result,
+              });
+
               const analyze = AzureSTT.getAnalyze(result.json);
               // 100 nano seconds increments
               const dur = result.duration;
@@ -300,8 +314,10 @@ export class AzureTTS extends AIModel<SpeechGeneration> {
         path.join(process.env.TEMP_DIR!, fileName)
       );
 
+      const speechConfig = AzureHelper.speechConfig();
+
       const speechSynthesizer = new sdk.SpeechSynthesizer(
-        AzureHelper.speechConfig,
+        speechConfig,
         audioConfig
       );
 

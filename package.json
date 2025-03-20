@@ -15,7 +15,7 @@
     "build-tsc": "tsc -p tsconfig.json",
     "lint": "tslint -p tsconfig.json",
     "update": "npm install",
-    "build-models": "node ./tools/build.js",
+    "build-models": "node ./tools/build_models.js",
     "combine": "node ./tools/combine.js",
     "dev": "node --watch dist/app.js",
     "start": "node ./tools/combine.js && node dist/app.js",

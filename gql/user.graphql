@@ -1,0 +1,120 @@
+# import * from "./types.graphql"
+
+input CreateJourneyInput {
+  to: String!
+  from: String!
+  name: String!
+  avatar: UploadingHsl!
+  modelSet: ID!
+
+  referenceText: String!
+
+  recording: ID
+  repating: String
+
+  description: String
+
+  introduction: String
+}
+
+input UpdateJourneyInput {
+  name: String
+  avatar: String
+}
+
+input DocumentationInput {
+  journeyId: ID!
+  title: String!
+  searchTerm: String!
+}
+
+type UserQuery {
+  my_journeys: JourneyConnection!
+  journey(id: ID!): Journey
+  material(id: ID!): Material
+  conversation_turns(materialId: ID!): [ConversationTurn!]!
+  parsed_units(text: String!, journeyId: ID!): LinguisticUnitSet!
+  documentation(input: DocumentationInput!): UserDoc!
+  user_doc(id: ID!): UserDoc!
+  journey_docs(journeyId: ID!, pagination: PaginationInput): UserDocConnection!
+  material_feedbacks(materialId: ID!): [AIFeedback!]!
+  model_sets: ModelSetConnection!
+  stage(journeyId: ID!, stageId: ID!): Stage
+
+  supported_languages: SupportedLanguageConnection!
+  supported_locales: SupportedLocaleConnection!
+}
+
+input CreateMaterialInput {
+  journeyId: ID!
+}
+
+input AnswerMaterialInput {
+  materialId: ID!
+  stageId: ID!
+  partId: ID!
+  answer: JSON!
+}
+
+input StartConversationInput {
+  materialId: ID!
+}
+
+input AddUserInputInput {
+  materialId: ID!
+  text: String
+  audio_ID: ID
+}
+
+type AnswerMaterialResponse {
+  newStage: Stage
+  currentStage: Stage
+}
+
+input GenMaterialInput {
+  journeyId: ID!
+  stageId: ID!
+  type: MaterialType!
+}
+
+type UserMutation {
+  create_journey(input: CreateJourneyInput!): Journey!
+
+  delete_journey(id: ID!): Boolean!
+  update_journey(id: ID!, input: UpdateJourneyInput!): Journey!
+
+  answer_material(input: AnswerMaterialInput!): AnswerMaterialResponse!
+
+  add_user_input(input: AddUserInputInput!): ConversationTurn!
+
+  """
+  Reset journey.
+  """
+  reset_journey(id: ID!): Boolean!
+
+  clear_conversation(materialId: ID!): Boolean!
+
+  prepare_material(materialId: ID!): Material!
+
+  regenerate_material(materialId: ID!): Material!
+
+  gen_material(input: GenMaterialInput!): Material!
+
+  set_next_part(stageId: ID!, part: Int!): Boolean!
+
+  practice_sentence(stageId: ID!, ref: ID!): Material!
+
+  practice_word(stageId: ID!, ref: ID!): Material!
+
+  enrich_documentation(stageId: ID!, ref: ID!): UserDoc!
+
+  enrich_dictionary(stageId: ID!, ref: ID!): UserDoc!
+
+  sentence_use_case(stageId: ID!, ref: ID!): UserDoc!
+
+  word_use_case(stageId: ID!, ref: ID!): UserDoc!
+
+  translate_sentence(stageId: ID!, ref: ID!): String!
+
+  translate_word(stageId: ID!, ref: ID!): String!
+}

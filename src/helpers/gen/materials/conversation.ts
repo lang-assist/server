@@ -4,9 +4,11 @@ import {
   IConversationTurn,
   IJourney,
   IMaterial,
+  IStage,
   IUser,
   Journey,
   Material,
+  Stage,
   Voices,
 } from "../../../models/_index";
 import { GenerationContext } from "../../../types/ctx";
@@ -30,6 +32,7 @@ import {
 } from "../../prompts";
 import { VoiceStore } from "../../vectors/stores/voice";
 import { randomString } from "../../../utils/random";
+import { LanguageHelper } from "../../language";
 
 type ConversationCtxStatus =
   | "not-started"
@@ -62,13 +65,18 @@ class ConversationFlow {
       throw new Error("Journey not found");
     }
 
+    const stage = await Stage.findById(material.stage_ID);
+    if (!stage) {
+      throw new Error("Stage not found");
+    }
+
     const turns = await ConversationTurn.find(
       {
         material_ID: material._id,
       },
       {
         sort: {
-          createdAt: -1,
+          createdAt: 1,
         },
       }
     );
@@ -76,7 +84,7 @@ class ConversationFlow {
     return new ConversationFlow({
       material: material!,
       journey: journey!,
-      pathID: material.pathID,
+      stage: stage!,
       user: args.user,
       turns: turns,
     });
@@ -85,7 +93,7 @@ class ConversationFlow {
   constructor(args: {
     material: WithId<IMaterial>;
     journey: WithId<IJourney>;
-    pathID: string;
+    stage: WithId<IStage>;
     user: WithId<IUser>;
     turns: WithId<IConversationTurn>[];
   }) {
@@ -107,7 +115,7 @@ class ConversationFlow {
     this.status = stat;
     this.material = args.material;
     this.journey = args.journey;
-    this.pathID = args.pathID;
+    this.stage = args.stage;
     this.user = args.user;
     this.turns = args.turns;
   }
@@ -185,7 +193,7 @@ class ConversationFlow {
 
   public journey: WithId<IJourney>;
 
-  public pathID: string;
+  public stage: WithId<IStage>;
 
   public user: WithId<IUser>;
 
@@ -278,6 +286,7 @@ class ConversationFlow {
 
     const lastTurn = this.turns[this.turns.length - 1];
 
+    console.log("Last turn", lastTurn, this.turns);
 
     if (lastTurn.character === "$user") {
       return "ai";
@@ -504,10 +513,21 @@ export class ConversationManager {
       cache: true,
     });
 
-    const detailsMsg = describeMaterial(flow.material);
+    const toName = LanguageHelper.getEnglishName(turnCtx.journey.to);
+
+    builder.systemMessage(
+      `User is learning ${toName}. Characters MUST speak ${toName}.`,
+      "thread",
+      1,
+      {
+        cache: false,
+      }
+    );
+
+    const detailsMsg = describeMaterial(flow.material, false);
 
     builder.systemMessage(detailsMsg, "thread", 1, {
-      cache: true,
+      cache: false,
     });
 
     const turnCount = flow.turns.length;
@@ -551,6 +571,7 @@ export class ConversationManager {
   }
 
   private static async _createTurnForAI(flow: ConversationFlow): Promise<void> {
+    console.log("Creating turn for AI");
     const turnCtx = await flow.createTurnCtx();
 
     if (!turnCtx) {
@@ -662,6 +683,8 @@ export class ConversationManager {
   private static async _genFirstTurn(flow: ConversationFlow) {
     await this.prepareConversation(flow);
 
+    console.log("First turn prepared", flow.nextTurn);
+
     while (flow.nextTurn === "ai") {
       await this._createTurnForAI(flow);
     }
@@ -702,8 +725,14 @@ export class ConversationManager {
       },
     });
 
+    console.log("Starting conversation", flow.status);
 
-    if (flow.status === "not-started" || flow.status === "ready") {
+    if (
+      flow.status === "not-started" ||
+      flow.status === "ready" ||
+      flow.status === "conversation"
+    ) {
+      console.log("Generating first turn", flow.status);
       this._genFirstTurn(flow);
     }
 
@@ -732,8 +761,7 @@ export class ConversationManager {
       yield output;
     }
 
-    prom.finally(() => {
-    });
+    prom.finally(() => {});
 
     await prom;
 
@@ -773,10 +801,15 @@ export class ConversationManager {
         throw new Error("Audio file not found");
       }
 
-      const res = await new TranscriptionGeneration(file, turnCtx, {
-        reason: "conversationTurn",
-        produced: input.audio_ID!,
-      }).generate();
+      const res = await new TranscriptionGeneration(
+        file,
+        turnCtx,
+        {
+          reason: "conversationTurn",
+          produced: input.audio_ID!,
+        },
+        turnCtx.journey.to
+      ).generate();
 
       text = res.transcription;
       analyze = res.analyze;

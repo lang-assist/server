@@ -68,7 +68,7 @@ The material types are as follows.
 
 There are different question types. Each type's structure is as follows:
 
-###### 1. TEXT_INPUT_WRITE
+###### 1. TEXT_WRITE
 
 The user can freely answer the question.
 

@@ -15,15 +15,7 @@ interface IModel extends TimeFields {
   ttsModel: string;
   sttModel: string;
   progress: BrocaTypes.Progress.PathProgress;
-  paths: {
-    [key: string]: {
-      name: string;
-      type: BrocaTypes.Progress.PathType;
-      profession?: string;
-      isMain: boolean;
-      isActive: boolean;
-    };
-  };
+  from: string;
 }
 
 const Model = DbHelper.model<IModel>({

@@ -13,15 +13,23 @@ export class FalImgGen extends AIModel<
   maxTries: number = 1;
   concurrency: number = 10;
 
-  constructor(public readonly name: string, forOneDollar: number) {
+  constructor(
+    public readonly name: string,
+    public priceCalc: { forOneDollar?: number; perSecond?: number },
+    public additionalParams: Record<string, any> = {}
+  ) {
     super("img", {
       per: 1,
       input: 0,
-      output: 1 / forOneDollar,
+      output: 1 / (priceCalc.forOneDollar ?? priceCalc.perSecond ?? 1),
     });
     fal.config({
       credentials: process.env.FAL_API_KEY!,
     });
+  }
+
+  public get calcInference() {
+    return this.priceCalc.perSecond !== undefined;
   }
 
   async _init(): Promise<void> {}
@@ -63,7 +71,7 @@ export class FalImgGen extends AIModel<
       },
       usage: {
         input: 0,
-        output: 1,
+        output: this.calcInference ? res.data.timings.inference : 1,
       },
       error: undefined,
     };

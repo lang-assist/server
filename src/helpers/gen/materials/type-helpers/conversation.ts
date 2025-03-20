@@ -1,7 +1,7 @@
 import { BaseMaterialTypeHelper } from "./base";
 import { AnswerContext, MaterialGenerationContext } from "../ctx";
 import { BrocaTypes } from "../../../../types";
-import { msg } from "../../../../utils/prompter";
+import { MessageBuilder, msg } from "../../../../utils/prompter";
 import { ConversationManager } from "../conversation";
 import { WithId } from "mongodb";
 import { ConversationTurn, IUserAnswer } from "../../../../models/_index";
@@ -10,7 +10,7 @@ import { removeSSML } from "../../../../utils/remove-ssml";
 export class ConversationMaterialTypeHelper extends BaseMaterialTypeHelper {
   _describeDetails(
     details: BrocaTypes.Material.Conversation.ConversationDetails
-  ): string {
+  ): MessageBuilder {
     const instMsg = msg();
 
     instMsg.addKv("Scenario", details.scenarioScaffold);
@@ -48,7 +48,7 @@ export class ConversationMaterialTypeHelper extends BaseMaterialTypeHelper {
 
     instMsg.add(charInstsMsg.build());
 
-    return instMsg.build();
+    return instMsg;
   }
 
   _describeAnswer(answer: WithId<IUserAnswer>): string {
@@ -116,10 +116,10 @@ export class ConversationMaterialTypeHelper extends BaseMaterialTypeHelper {
       details as BrocaTypes.Material.Conversation.ConversationDetails
     ).characters = newCharacters;
 
-    if (ctx.requiredMaterial.material) {
+    if (ctx.requiredMaterial) {
       promises.push(
         ConversationManager.prepareConversationDetails(
-          ctx.requiredMaterial.material,
+          ctx.requiredMaterial,
           ctx.flow.user
         )
       );

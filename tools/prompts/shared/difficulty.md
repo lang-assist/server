@@ -1,4 +1,4 @@
-# Difficulty Management Guidelines
+# Difficulty / Level Management Guidelines
 
 ## Skill-Based Assessment:
 

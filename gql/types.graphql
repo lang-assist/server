@@ -1,0 +1,808 @@
+# Tüm tipler için temel interface
+interface Node {
+  id: ID!
+}
+
+"""
+@resolver(permissions: [String!]!)
+This directive marks the field as a resolver required.
+
+If permissions is empty, it means that the field is public.
+
+Given permissions will be checked with OR logic.
+"""
+directive @resolver(permissions: [String!]!) on FIELD_DEFINITION
+
+"""
+@reference(collection: String!)
+This directive marks the field as a document from the given collection.
+"""
+directive @reference(collection: String!) on FIELD_DEFINITION
+
+"""
+@foreign_connection(collection: String!, foreignField: String!)
+This directive marks the field as a paginated connection from the given collection.
+"""
+directive @foreign_connection(
+  collection: String!
+  foreignField: String!
+) on FIELD_DEFINITION
+
+directive @grouped_foreign_connection(
+  collection: String!
+  foreignField: String!
+  groupFields: [String!]!
+) on FIELD_DEFINITION
+
+directive @paginate(collection: String!) on FIELD_DEFINITION
+
+directive @group_by(
+  collection: String!
+  groupFields: [String!]!
+) on FIELD_DEFINITION
+
+directive @from_collection(collection: String!) on FIELD_DEFINITION
+
+enum Domains {
+  user
+  org
+  admin
+  public
+  auth
+}
+
+directive @domain(domain: Domains!) on FIELD_DEFINITION
+
+# DateTime
+scalar DateTime
+
+# JSON
+scalar JSON
+
+# Any
+scalar Any
+
+# Email
+scalar Email
+
+# PhoneNumber
+scalar PhoneNumber
+
+# Contact
+scalar Contact
+
+# VerifyCode
+scalar VerifyCode
+
+scalar Base64Data # Base64 encoded data
+scalar Avatar # HSL or ID
+scalar Hsl # HSL color
+enum Providers {
+  EMAIL
+  PHONE
+  GOOGLE
+  APPLE
+}
+
+input UploadingHsl {
+  hsl: Hsl!
+}
+
+input UploadingFile {
+  mimeType: String!
+  encoding: String # encoding of the file. Not data. Data is base64 encoded.
+  filename: String
+  data: Base64Data!
+}
+
+input PaginationInput {
+  filter: JSON
+
+  sort: String # field:order -> createdAt:desc
+  limit: Int = 50
+
+  cursor: String
+}
+
+# Pagination için genel tipler
+type PageInfo {
+  hasNextPage: Boolean!
+  nextCursor: String
+}
+
+type GroupKey {
+  value: Any!
+  count: Int!
+}
+
+type Group {
+  key: String!
+  values: [GroupKey!]!
+}
+
+type GroupInfo {
+  totalCount: Int!
+  groups: [Group!]!
+}
+
+# Connection pattern için genel interface
+interface Connection {
+  pageInfo: PageInfo!
+  items: [Node!]!
+  groups: GroupInfo
+}
+
+type User implements Node {
+  id: ID!
+  name: String!
+  avatar: Avatar!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  """
+  @resolver_required
+  """
+  authMethods(pagination: PaginationInput): AuthMethodConnection!
+    @resolver(
+      permissions: [
+        "/client/@id/#" # Client own data
+        "/admin/users/auth/read" # Admin data
+      ]
+    )
+    @foreign_connection(collection: "auth", foreignField: "user")
+}
+
+type UserConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [User!]!
+  groups: GroupInfo
+}
+
+type ProviderInfo {
+  id: ID!
+  name: String!
+  email: String!
+  avatar: String
+  token: String
+  refreshToken: String
+  expiresAt: DateTime
+}
+
+type AuthMethod implements Node {
+  id: ID!
+  provider: Providers!
+
+  """
+  @resolver_required
+  """
+  user: User!
+    @resolver(permissions: ["/client/@user_ID", "/admin/users/auth/read"])
+    @reference(collection: "users")
+  user_ID: ID!
+
+  info: ProviderInfo!
+  verified: Boolean!
+}
+
+type AuthMethodConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [AuthMethod!]!
+  groups: GroupInfo
+}
+
+type AdminRole implements Node {
+  id: ID!
+  name: String!
+  description: String!
+  permissions: [String!]!
+
+  admins(pagination: PaginationInput): AdminConnection!
+    @resolver(permissions: ["/admin/team/read"])
+    @foreign_connection(collection: "admins", foreignField: "role_ID")
+}
+
+"""
+Platform admin
+"""
+type Admin implements Node {
+  id: ID!
+
+  user: User @reference(collection: "users")
+  user_ID: ID!
+
+  email: String!
+
+  role: AdminRole! @reference(collection: "admin_roles")
+  role_ID: ID!
+
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type AdminConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [Admin!]!
+  groups: GroupInfo
+}
+
+enum FeedbackType {
+  FEEDBACK
+  COMPLAINT
+}
+
+enum FeedbackStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum FeedbackCategory {
+  SERVICE
+  SERVICER
+  ORGANIZATION
+  USER
+  REVIEW
+  OTHER
+}
+
+type Feedback {
+  id: ID!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  status: FeedbackStatus!
+  type: FeedbackType!
+  category: FeedbackCategory!
+  comment: String
+  images: [String!]
+
+  """
+  Şikayet eden kullanıcı
+  """
+  issuer: User! @reference(collection: "users")
+  issuer_ID: ID!
+
+  """
+  Şikayet edilen kullanıcı
+  """
+  user: User @reference(collection: "users")
+  user_ID: ID
+}
+
+"""
+Öğrenilecek diller
+"""
+type SupportedLanguage implements Node {
+  id: ID!
+  tag: String!
+  name: String!
+  direction: String!
+  country: String
+  sentences_to_voice: [String!]!
+  sentences_to_translate: [String!]!
+}
+
+type SupportedLanguageConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [SupportedLanguage!]!
+  groups: GroupInfo
+}
+
+"""
+Cihaz dili / Original language
+"""
+type SupportedLocale implements Node {
+  id: ID!
+  name: String!
+  tag: String!
+  direction: String!
+  country: String
+}
+
+type SupportedLocaleConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [SupportedLocale!]!
+  groups: GroupInfo
+}
+
+"""
+Dil öğrenme yolculuğu
+"""
+type Journey implements Node {
+  id: ID!
+
+  to: String!
+  from: String!
+
+  name: String!
+  avatar: String!
+  """
+  Son çalışma tarihi
+  """
+  lastStudyDate: DateTime
+
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  stages(pagination: PaginationInput): StageConnection!
+    @resolver(permissions: ["/client/@user_ID"])
+    @foreign_connection(collection: "stages", foreignField: "journey_ID")
+}
+
+type JourneyConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [Journey!]!
+  groups: GroupInfo
+}
+
+enum StageStatus {
+  GENERATING
+  GENERATED
+  COMPLETED
+}
+
+type Levels {
+  listening: Int!
+  reading: Int!
+  speaking: Int!
+  writing: Int!
+  grammar: Int!
+  vocabulary: Int!
+}
+
+type Stage implements Node {
+  id: ID!
+  journey_ID: ID!
+
+  name: String
+  description: String
+  imageId: ID
+  status: StageStatus!
+
+  # `parts` reserved. So this field is `stageParts`
+  stagePart: StagePartConnection!
+
+  levelsOnStart: Levels
+  levelsOnFinish: Levels
+  notes: [String!]
+}
+
+type StageConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [Stage!]!
+  groups: GroupInfo
+}
+
+type MaterialCreation {
+  type: MaterialType!
+  material: Material!
+}
+
+enum StagePartType {
+  DOCUMENTATION
+  TASK
+  WORDS
+  SENTENCES
+}
+
+type StageDocumentationPart {
+  title: String!
+  ref_ID: ID!
+}
+
+type StageMaterialPart {
+  type: MaterialType!
+  material_ID: ID!
+}
+
+type StageWord {
+  word: String!
+  category: String
+  ref_ID: ID
+  practices: [ID!]
+  use_cases: [ID!]
+}
+
+type StageSentence {
+  sentence: String!
+  context: String!
+  ref_ID: ID
+  practices: [ID!]
+  use_cases: [ID!]
+}
+
+type StagePart implements Node {
+  id: ID!
+  type: StagePartType!
+  explanation: String!
+
+  material: StageMaterialPart
+  documentation: StageDocumentationPart
+  words: [StageWord!]
+  sentences: [StageSentence!]
+}
+
+type StagePartConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [StagePart!]!
+  groups: GroupInfo
+}
+
+# İçerik tipleri
+enum MaterialType {
+  STORY # Hikayeler
+  QUIZ # Testler
+  CONVERSATION # Konuşma pratiği
+  UNKNOWN # Bilinmiyor
+}
+
+# İçerik durumu
+enum MaterialGenStatus {
+  CREATING # Oluşturuluyor
+  PREPARING # Hazırlanıyor
+  COMPLETED # Tamamlanmış
+  ERROR # Hata
+}
+
+enum MaterialCompStatus {
+  NOT_STARTED # Henüz başlanmamış
+  COMPLETED # Tamamlanmış
+  ANALYZING # Analiz ediliyor
+  ERROR # Hata
+}
+
+enum MaterialConvStatus {
+  NOT_STARTED # Henüz başlanmamış
+  COMPLETED # Tamamlanmış
+  PENDING # Beklemede
+}
+
+enum MaterialFeedbackStatus {
+  NOT_STARTED # Henüz başlanmamış
+  GENERATING # Oluşturuluyor
+  COMPLETED # Tamamlanmış
+  ERROR # Hata
+}
+
+scalar LinguisticUnit
+scalar LinguisticUnitSet
+
+# Temel içerik tipi
+type Material implements Node {
+  id: ID!
+
+  # Hangi journey'ye ait
+  journey: Journey!
+    @resolver(permissions: ["/client/@user_ID"])
+    @reference(collection: "journeys")
+  journey_ID: ID!
+
+  user: User!
+    @resolver(permissions: ["/client/@user_ID"])
+    @reference(collection: "users")
+  user_ID: ID!
+
+  stage: Stage!
+    @resolver(permissions: ["/client/@user_ID"])
+    @reference(collection: "stages")
+  stage_ID: ID!
+
+  part: StagePart!
+    @resolver(permissions: ["/client/@user_ID"])
+    @reference(collection: "stage_parts")
+  part_ID: ID!
+
+  genStatus: MaterialGenStatus!
+  compStatus: MaterialCompStatus!
+  convStatus: MaterialConvStatus!
+  feedbackStatus: MaterialFeedbackStatus!
+
+  # Tarihler
+  createdAt: DateTime!
+  completedAt: DateTime
+
+  details: MaterialDetails
+
+  type: MaterialType
+
+  answer: UserAnswer @resolver(permissions: ["/client/@user_ID"])
+
+  aiFeedbacks(pagination: PaginationInput): AIFeedbackConnection!
+    @resolver(permissions: ["/client/@user_ID"])
+    @foreign_connection(collection: "ai_feedback", foreignField: "material_ID")
+
+  unseenAiFeedbacks: Int! @resolver(permissions: ["/client/@user_ID"])
+
+  turns(pagination: PaginationInput): ConversationTurnConnection!
+    @resolver(permissions: [])
+    @foreign_connection(
+      collection: "conversation_turns"
+      foreignField: "material_ID"
+    )
+}
+
+type MaterialConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [Material!]!
+  groups: GroupInfo
+}
+
+type UserAnswer implements Node {
+  id: ID!
+
+  user: User!
+    @reference(collection: "users")
+    @resolver(permissions: ["/client/@user_ID"])
+  user_ID: ID!
+
+  material: Material!
+    @resolver(permissions: ["/client/@user_ID"])
+    @reference(collection: "materials")
+  material_ID: ID!
+
+  createdAt: DateTime!
+  answers: JSON!
+}
+
+type UserAnswerConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [UserAnswer!]!
+  groups: GroupInfo
+}
+
+# Her içerik tipine özel alanlar için interface
+interface MaterialDetails {
+  type: MaterialType!
+  title: String!
+  description: String!
+}
+
+enum StoryPartType {
+  NARRATIVE
+  PICTURE
+  AUDIO
+  QUESTION
+}
+
+type StoryPart {
+  type: StoryPartType!
+  question: QuizQuestion
+  hasPicture: Boolean!
+  pictureId: ID
+  audioId: ID
+  ssml: String
+}
+
+# Hikaye detayları
+type StoryDetails implements MaterialDetails {
+  type: MaterialType!
+  title: String!
+  description: String!
+  parts: [StoryPart!]!
+}
+
+type QuizDetails implements MaterialDetails {
+  type: MaterialType!
+  title: String!
+  description: String!
+  questions: [QuizQuestion!]!
+  preludes: [QuizPrelude!]
+}
+
+enum QuizPreludeItemType {
+  TEXT
+  PICTURE
+  AUDIO
+}
+
+type QuizPreludeItem {
+  type: QuizPreludeItemType!
+  content: LinguisticUnitSet
+  hasPicture: Boolean!
+  pictureId: ID
+  audioId: ID
+}
+
+type QuizPrelude {
+  id: ID!
+  parts: [QuizPreludeItem!]!
+}
+
+enum QuizQuestionType {
+  MULTIPLE_CHOICE
+  CHOICE
+  TRUE_FALSE
+  FILL_BLANK
+  MATCHING # match the items
+  ORDERING # order the items
+  TEXT_WRITE # text input with writing
+  RECORD # record the user's voice
+}
+
+type QuestionItem {
+  id: ID!
+  text: LinguisticUnitSet!
+  pictureId: ID
+  hasPicture: Boolean!
+  audioId: ID
+}
+
+type QuizQuestion {
+  id: String!
+  type: QuizQuestionType!
+  question: LinguisticUnitSet!
+  preludeID: String # For example, if telling a story at the beginning and asking questions about it.
+  choices: [QuestionItem!]
+  secondaryChoices: [QuestionItem!] # for matching
+}
+
+type ConversationCharacter {
+  name: String!
+  description: String
+  voice: String
+  avatar: Avatar
+  gender: String
+}
+
+type ConversationDetails implements MaterialDetails {
+  type: MaterialType!
+  title: String!
+  description: String!
+  instructions: LinguisticUnitSet!
+  characters: [ConversationCharacter!]!
+}
+
+type MaterialConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [Material!]!
+  groups: GroupInfo
+}
+
+# Konuşma dönüşümü
+type ConversationTurn implements Node {
+  id: ID!
+
+  material: Material!
+    @resolver(permissions: ["/client/@user_ID"])
+    @reference(collection: "materials")
+  material_ID: ID!
+
+  ssml: String # if turn is user, ssml is null
+  character: String! # user or other characters.
+  text: LinguisticUnitSet # if turn is user, text is null
+  createdAt: DateTime!
+  audio_ID: ID # if turn is not user, audio_ID is null
+  analyze: JSON # if turn is user, analyze is not null
+  nextTurn: String
+}
+
+type ConversationTurnConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [ConversationTurn!]!
+  groups: GroupInfo
+}
+
+type ConversationUpdate {
+  turn: ConversationTurn
+  nextTurn: String
+}
+
+enum AIFeedbackType {
+  CORRECTION
+  RECOMMENDATION
+  EXPLANATION
+  PRACTICE_TIP
+  GENERAL_FEEDBACK
+  OTHER
+}
+
+enum AIFeedbackPartType {
+  WRONG
+  RIGHT
+  TIP
+  EXPLANATION
+  OTHER
+}
+
+type AIFeedbackPart {
+  type: AIFeedbackPartType!
+  text: String!
+}
+
+type AIFeedbackInterface {
+  type: AIFeedbackType!
+  question: String
+  turnIndex: Int
+  parts: [AIFeedbackPart!]!
+}
+
+type AIFeedback implements Node {
+  id: ID!
+  createdAt: DateTime!
+
+  material: Material
+    @resolver(permissions: ["/client/@user_ID"])
+    @reference(collection: "materials")
+  material_ID: ID
+
+  user: User
+    @resolver(permissions: ["/client/@user_ID"])
+    @reference(collection: "users")
+  user_ID: ID!
+
+  feedback: AIFeedbackInterface!
+
+  seen: Boolean!
+}
+
+type AIFeedbackConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [AIFeedback!]!
+  groups: GroupInfo
+}
+
+enum UserDocExplanationType {
+  text
+  picture
+  audio
+}
+
+enum UserDocExplanationUI {
+  tip
+  example
+  explanation
+  note
+  warning
+  error
+  right
+}
+
+type UserDocExplanation {
+  type: UserDocExplanationType!
+  ui: UserDocExplanationUI
+  text: String
+  pictureId: ID
+  audioId: ID
+}
+
+type UserDoc implements Node {
+  id: ID!
+  template_ID: ID!
+  user_ID: ID!
+  journey_ID: ID!
+
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  template: UserDocTemplate!
+    @resolver(permissions: ["/client/@user_ID"])
+    @reference(collection: "doc_templates")
+}
+
+type UserDocTemplate implements Node {
+  id: ID!
+  title: String!
+  description: String!
+  includes: [String!]!
+  explanations: [UserDocExplanation!]!
+}
+type UserDocConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [UserDoc!]!
+  groups: GroupInfo
+}
+
+type ModelSet implements Node {
+  id: ID!
+  name: String!
+  description: String!
+  chatModel: String!
+  ttsModel: String!
+  sttModel: String!
+  imgModel: String!
+}
+
+type ModelSetConnection implements Connection {
+  pageInfo: PageInfo!
+  items: [ModelSet!]!
+  groups: GroupInfo
+}

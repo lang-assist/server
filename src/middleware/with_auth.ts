@@ -14,6 +14,7 @@ import {
 import { DeviceManager } from "../helpers/device";
 import { AppContext } from "../utils/types";
 import { PermissionManager } from "../utils/permission";
+import { WithGQLID } from "../helpers/db";
 
 function merge(options?: {
   allowApiKey?: boolean;
@@ -179,9 +180,9 @@ export function withAuthGQL(domain: "admin" | "user" | "public" | "auth") {
         }
       }
 
-      let tokenData: WithId<IToken> | null = null;
-      let userData: WithId<IUser> | null = null;
-      let auth: WithId<IAuth> | null = null;
+      let tokenData: WithGQLID<IToken> | null = null;
+      let userData: WithGQLID<IUser> | null = null;
+      let auth: WithGQLID<IAuth> | null = null;
 
       if (!credentials) {
         return context;

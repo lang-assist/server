@@ -24,6 +24,8 @@ export interface IModel extends TimeFields {
   };
 
   total: number;
+
+  reason: string;
 }
 
 export const Model = DbHelper.model<IModel>({

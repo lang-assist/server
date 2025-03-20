@@ -3,6 +3,7 @@ import { getDirective, MapperKind, mapSchema } from "@graphql-tools/utils";
 import { PermissionManager } from "../utils/permission";
 import ApiError from "../utils/error";
 import { AppContext } from "../utils/types";
+import { log } from "../helpers/log";
 
 const resolverDirective = (schema: GraphQLSchema): GraphQLSchema => {
   return mapSchema(schema, {
@@ -60,7 +61,7 @@ const resolverDirective = (schema: GraphQLSchema): GraphQLSchema => {
                 managers[processedPermission.split("/")[1]];
 
               if (!permissionManager) {
-                console.error("permission_manager_not_found", {
+                log.error("permission_manager_not_found", {
                   processedPermission,
                   managers,
                 });

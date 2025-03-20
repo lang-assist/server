@@ -1,0 +1,121 @@
+# import * from "./types.graphql"
+
+input LoginEmailRequest {
+  email: Email!
+  password: String!
+}
+
+input LoginPhoneRequest {
+  phone: PhoneNumber!
+  password: String!
+}
+
+input LoginGoogleRequest {
+  code: String!
+}
+
+input LoginAppleRequest {
+  code: String!
+}
+
+input ResetPasswordRequest {
+  email: Email!
+}
+
+input VerifyForgotPasswordRequest {
+  email: Email!
+  code: VerifyCode!
+}
+
+type VerifyForgotPasswordResponse {
+  token: String!
+}
+
+input ChangePasswordRequest {
+  token: String!
+  newPassword: String!
+}
+
+type AuthInfo {
+  token: String # JWT token. Given if the auth method is verified.
+  verified: Boolean!
+  v_session: ID # Verification session id
+}
+
+type AuthResponse {
+  user: User!
+  auth: AuthInfo!
+  admin: Admin
+}
+
+type MeResponse {
+  user: User!
+  admin: Admin
+}
+
+input VerifyEmailRequest {
+  v_session: ID!
+  code: VerifyCode!
+}
+
+input RegisterEmailRequest {
+  name: String!
+  email: Email!
+  password: String!
+}
+
+input RegisterPhoneRequest {
+  name: String!
+  phone: PhoneNumber!
+  password: String!
+}
+
+input ResendVerifyEmailRequest {
+  email: Email!
+}
+
+type AuthQuery {
+  # Sadece veri okuyan operasyonlar
+  me: MeResponse!
+    @resolver(
+      permissions: [
+        "/client/#" # Check if the same user
+        "/admin/users/auth/read"
+      ]
+    )
+
+  check_provider(contact: Contact!): ProviderResponse!
+}
+
+type ProviderResponse {
+  user: User
+  providers: [Providers!]!
+}
+
+type AuthMutation {
+  # State değiştiren tüm operasyonlar
+  login_email(input: LoginEmailRequest!): AuthResponse!
+  login_phone(input: LoginPhoneRequest!): AuthResponse!
+
+  login_google(input: LoginGoogleRequest!): AuthResponse!
+  login_apple(input: LoginAppleRequest!): AuthResponse!
+
+  logout: Boolean!
+    @resolver(
+      permissions: [
+        "/client/#" # Check if the same user
+      ]
+    )
+
+  reset_password(input: ResetPasswordRequest!): Boolean!
+  verify_forgot_password(
+    input: VerifyForgotPasswordRequest!
+  ): VerifyForgotPasswordResponse!
+  change_password(input: ChangePasswordRequest!): AuthResponse!
+
+  resend_verify_email(input: ResendVerifyEmailRequest!): Boolean!
+  verify_email(input: VerifyEmailRequest!): AuthResponse!
+
+  register_email(input: RegisterEmailRequest!): AuthResponse!
+  register_phone(input: RegisterPhoneRequest!): AuthResponse!
+}

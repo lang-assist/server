@@ -19,7 +19,6 @@ import { ApolloServer } from "@apollo/server";
 import fs from "fs";
 import { expressMiddleware } from "@apollo/server/express4";
 import { berberEnv, init } from "./init";
-import { createHash } from "crypto";
 import { ApolloServerPluginDrainHttpServer } from "@apollo/server/plugin/drainHttpServer";
 import { WebSocketServer } from "ws";
 import { useServer } from "graphql-ws/lib/use/ws";
@@ -28,7 +27,7 @@ import { withAuthGQL } from "./middleware/with_auth";
 import { StorageService } from "./helpers/storage";
 
 function loadSchema(): string[] {
-  const dir = path.join(__dirname, "../../../lib/gql/schema");
+  const dir = path.join(__dirname, "../gql");
 
   const files = fs.readdirSync(dir).filter((file) => file.endsWith(".graphql"));
 
@@ -247,6 +246,7 @@ import {
 } from "./resolvers/user";
 import { RoleHelper } from "./helpers/role";
 import { TermManager } from "./helpers/gen/term";
+import { Log, log } from "./helpers/log";
 function listen() {
   if (berberEnv.ENV !== "local") {
     return;
@@ -383,7 +383,7 @@ init(
         schema: setDirectives(schema),
         introspection: true,
         formatError: (error) => {
-          console.error("ERROR", error);
+          log.error(error);
           return {
             message: error.message,
             locations: error.locations,
@@ -426,17 +426,20 @@ init(
       app.use("/graphql", middleware);
     } catch (e) {
       if (e instanceof GraphQLError) {
-        console.error(
-          e.message,
-          e.cause,
-          e.locations,
-          e.nodes,
-          e.positions,
-          e.path,
-          e.source
+        log.error(
+          {
+            message: e.message,
+            cause: e.cause,
+            locations: e.locations,
+            nodes: e.nodes,
+            positions: e.positions,
+            path: e.path,
+            source: e.source,
+          },
+          "GraphQL Error"
         );
       } else {
-        console.error(e);
+        log.error(e);
       }
     }
   },

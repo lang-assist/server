@@ -6,12 +6,22 @@ import {
   Journey,
   Material,
   ModelsSet,
+  Stage,
 } from "../models/_index";
 import ApiError from "../utils/error";
 import { AIModel } from "../types/ctx";
 import { ProgressHelper } from "./gen/materials/progress";
 import { GqlTypes } from "../utils/gql-types";
 import { WithGQLID } from "./db";
+import { MaterialGenerationHelper } from "./gen/materials/generation";
+import {
+  MaterialFlowContext,
+  MaterialGenerationContext,
+} from "./gen/materials/ctx";
+import { BrocaTypes } from "../types";
+import { randomString } from "../utils/random";
+import { log } from "./log";
+import { LanguageHelper } from "./language";
 
 export class JourneyHelper {
   // static async createUserInitialPath(journeyId: ObjectId) {
@@ -67,26 +77,10 @@ export class JourneyHelper {
   // }
 
   static async createJourney(
-    user: WithId<IUser>,
+    user: WithGQLID<IUser>,
     input: GqlTypes.User.CreateJourneyInput
-  ): Promise<GqlTypes.User.CreateJourneyResponse> {
-    const created: {
-      journey?: WithGQLID<IJourney> | null;
-      materials?: WithGQLID<IMaterial>[] | null;
-    } = {};
-
-    async function removeCreated() {
-      const promises = [];
-      if (created.journey) {
-        promises.push(Journey.findByIdAndDelete(created.journey._id));
-      }
-      if (created.materials) {
-        for (const material of created.materials) {
-          promises.push(Material.findByIdAndDelete(material._id));
-        }
-      }
-      await Promise.all(promises);
-    }
+  ): Promise<WithGQLID<IJourney>> {
+    let created: WithGQLID<IJourney> | null = null;
 
     const modelSet = await ModelsSet.findById(input.modelSet);
 
@@ -106,7 +100,11 @@ export class JourneyHelper {
         throw ApiError.e400("Invalid AI model");
       }
 
-      created.journey = await Journey.insertOne({
+      if (!LanguageHelper.getSupportedLanguageByTag(input.to)) {
+        throw ApiError.e400("Invalid target language");
+      }
+
+      created = await Journey.insertOne({
         user_ID: user._id,
         avatar: input.avatar.hsl,
         lastStudyDate: Date.now(),
@@ -117,16 +115,8 @@ export class JourneyHelper {
         name: input.name,
         status: "active",
         to: input.to,
-        paths: {
-          initial: {
-            name: "Initial path",
-            type: "INITIAL",
-            isMain: true,
-            isActive: true,
-          },
-        },
+        from: input.from,
         progress: {
-          completedActivities: 0,
           level: {
             grammar: -1,
             listening: -1,
@@ -137,32 +127,25 @@ export class JourneyHelper {
           },
           strongPoints: [],
           weakPoints: [],
-          observations: [],
+          general: [],
         },
       });
 
-      if (!created.journey) {
-        await removeCreated();
+      if (!created) {
         throw ApiError.e500("Failed to create journey");
       }
 
-      created.materials = await ProgressHelper.getInitialMaterials({
-        journeyId: created.journey._id,
-        user: user,
-      });
+      const j = await ProgressHelper.analyzeInitialAnswers(
+        created,
+        user,
+        input
+      );
 
-      if (!created.materials) {
-        await removeCreated();
-        throw ApiError.e500("Failed to create initial material");
-      }
+      await ProgressHelper.generateStage(j, user, false);
 
-      return {
-        journey: created.journey,
-        materials: created.materials,
-      };
+      return j;
     } catch (e) {
-      await removeCreated();
-      console.error(e);
+      log.error(e);
       throw ApiError.e500("Failed to create journey");
     }
   }

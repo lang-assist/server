@@ -74,7 +74,8 @@ export class TranscriptionGeneration extends Generation<BrocaTypes.AI.Transcript
     meta: {
       reason: string;
       [key: string]: any;
-    }
+    },
+    public language: string | "auto"
   ) {
     super(ctx, meta);
   }

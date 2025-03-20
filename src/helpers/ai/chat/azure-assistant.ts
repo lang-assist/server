@@ -3,7 +3,6 @@ import { AssistantStreamEvent } from "openai/resources/beta/assistants";
 import { AIModel } from "../../../types/ctx";
 import { ChatGeneration } from "./base";
 import { BrocaTypes } from "../../../types";
-import { berberEnv } from "../../../init";
 import { Chatgpt_event, Prompts } from "../../../models/_index";
 import { AIRateLimitError } from "../../../utils/ai-types";
 import { AIError } from "../../../utils/ai-types";
@@ -23,15 +22,22 @@ export class AzureAssistant extends AIModel<ChatGeneration<any>> {
   concurrency: number = 10;
 
   constructor(
-    public modelName: string,
-    public apiKey: string,
+    modelName: string,
+    apiKey: string,
     price: BrocaTypes.AI.Types.AIPricing,
-    public baseUrl: string,
-    public deployment: string
+    baseUrl: string,
+    deployment: string
   ) {
     super("chat", price);
     this.name = modelName;
+    this.apiKey = apiKey;
+    this.baseUrl = baseUrl;
+    this.deployment = deployment;
   }
+
+  apiKey: string;
+  baseUrl: string;
+  deployment: string;
 
   name: string;
 

@@ -4,14 +4,19 @@ import { WithId } from "mongodb";
 import {
   IConversationTurn,
   IJourney,
+  IStage,
   IUser,
   IUserAnswer,
   Material,
+  Stage,
+  UserActions,
 } from "../models/_index";
 import { IMaterial } from "../models/_index";
 import { BrocaTypes } from "../types";
 import { msg } from "../utils/prompter";
 import { BaseMaterialTypeHelper } from "./gen/materials/type-helpers";
+import { LanguageHelper } from "./language";
+import { LocaleHelper } from "./locale";
 
 function readInstruction(file: string) {
   const filePath = path.join(__dirname, "..", "..", "tools", "combined", file);
@@ -21,6 +26,11 @@ function readInstruction(file: string) {
 }
 
 const MaterialGenerationVersion = 3;
+
+export const additionalInstructions = {
+  initial_stage: msg(readInstruction("../additional/initial_stage.md")),
+  other_stage: msg(readInstruction("../additional/other_stage.md")),
+};
 
 export const instructions = {
   conversation_turn: {
@@ -47,8 +57,12 @@ export const instructions = {
     content: msg(readInstruction("linguistic_units.md")),
     version: 1,
   },
-  progress: {
-    content: msg(readInstruction("progress.md")),
+  analyzer: {
+    content: msg(readInstruction("analyzer.md")),
+    version: 1,
+  },
+  stager: {
+    content: msg(readInstruction("stager.md")),
     version: 1,
   },
   quiz: {
@@ -61,18 +75,23 @@ export const instructions = {
   },
 };
 
-export function describeMaterial(material: WithId<IMaterial>) {
+export function describeMaterial(
+  material: WithId<IMaterial>,
+  withInstructions: boolean
+) {
   const message = msg();
   message.addKv("Type", material.details.type);
-  message.addKv("Title", material.metadata.title);
-  message.addKv("Description", material.metadata.description);
-  message.addKv("Focus Areas", material.metadata.focusAreas.join(", "));
-  message.addKv("Focus Skills", material.metadata.focusSkills.join(", "));
-
+  if (material.improves.length > 0) {
+    message.addKv("Improves", material.improves.join(", "));
+  }
+  if (material.measures.length > 0) {
+    message.addKv("Measures", material.measures.join(", "));
+  }
+  if (withInstructions && material.instructions) {
+    message.addKv("Instructions", material.instructions);
+  }
   const details = BaseMaterialTypeHelper.describeDetails(material.details);
-
   message.addKv("Details", details);
-
   return message;
 }
 
@@ -87,106 +106,132 @@ export function describeAnswer(
 
 export function describeMaterialAnswer(
   material: WithId<IMaterial>,
-  answer: WithId<IUserAnswer>
+  answer: WithId<IUserAnswer>,
+  withInstructions: boolean
 ) {
   const message = msg();
-  message.addKv("Material", describeMaterial(material));
+  message.addKv("Material", describeMaterial(material, withInstructions));
   message.addKv("Answer", describeAnswer(material.details.type, answer));
   return message;
 }
 
-export function summarizeMaterialFocus(material: WithId<IMaterial>) {
+export function summarizeStageFocus(stage: WithId<IStage>) {
   const message = msg();
 
-  message.addKv("Title", material.metadata.title);
-  message.addKv("Description", material.metadata.description);
-  message.addKv("Skills", material.metadata.focusSkills.join(", "));
-  message.addKv("Areas", material.metadata.focusAreas.join(", "));
+  message.addKv("Description", stage.description);
+  message.addKv("Skills", stage.focusSkills?.join(", ") ?? "Unknown");
+  message.addKv("Areas", stage.focusAreas?.join(", ") ?? "Unknown");
+  message.addKv("Topics", stage.includedTopics?.join(", ") ?? "Unknown");
 
+  return message;
+}
+
+export async function previousBehaviors(stage: WithId<IStage>) {
+  const message = msg();
+
+  const behaviors = await UserActions.find(
+    {
+      stage_ID: stage._id,
+    },
+    {
+      sort: {
+        createdAt: -1,
+      },
+    }
+  );
+
+  for (const behavior of behaviors) {
+    message.add(behavior.behavior);
+  }
+  return message;
+}
+
+export function progressSummary(journey: WithId<IJourney>) {
+  const message = msg();
+
+  message.addKv("Progress", (progressMsg) => {
+    const levels = journey.progress.level;
+    const levelsMsg = msg();
+    for (const [key, value] of Object.entries(levels)) {
+      if (value < 0) {
+        levelsMsg.addKv(key, "Unknown");
+      } else {
+        levelsMsg.addKv(key, `${value}%`);
+      }
+    }
+    progressMsg.addKv("Levels", levelsMsg);
+
+    progressMsg.addKv("Observations", (observationsMsg) => {
+      observationsMsg.addKv("General", (general) => {
+        const generalObservations = journey.progress.general ?? [];
+        for (let i = 0; i < generalObservations.length; i++) {
+          const observation = generalObservations[i];
+          general.add(msg().addKv(`Index ${i}`, observation));
+        }
+      });
+
+      observationsMsg.addKv("Weak Points", (weaknesses) => {
+        const weakPoints = journey.progress.weakPoints ?? [];
+        for (let i = 0; i < weakPoints.length; i++) {
+          const weakPoint = weakPoints[i];
+          weaknesses.add(msg().addKv(`Index ${i}`, weakPoint));
+        }
+      });
+
+      observationsMsg.addKv("Strong Points", (strengths) => {
+        const strongPoints = journey.progress.strongPoints ?? [];
+        for (let i = 0; i < strongPoints.length; i++) {
+          const strongPoint = strongPoints[i];
+          strengths.add(msg().addKv(`Index ${i}`, strongPoint));
+        }
+      });
+    });
+  });
+
+  return message;
+}
+
+export async function lastStagesSummaries(journey: WithId<IJourney>) {
+  const message = msg();
+  const lastStages = await Stage.find(
+    {
+      journey_ID: journey._id,
+      status: {
+        $in: ["GENERATED", "COMPLETED"],
+      },
+    },
+    {
+      sort: {
+        createdAt: -1,
+      },
+      limit: 10,
+    }
+  );
+
+  const count = lastStages.length;
+  message.addKv(`Last ${count} stages focus`, (materialsMsg) => {
+    for (let i = 0; i < count; i++) {
+      materialsMsg.addKv(
+        `${i + 1}. ${lastStages[i].name}`,
+        summarizeStageFocus(lastStages[i])
+      );
+    }
+  });
   return message;
 }
 
 export async function journeySummary(
   journey: WithId<IJourney>,
-  user: WithId<IUser>,
-  pathID: string,
-  includeLastMaterials: boolean,
-  includeProgress: boolean
+  user: WithId<IUser>
 ) {
   const journeySummary = msg();
 
+  const toName = LanguageHelper.getEnglishName(journey.to);
+  const fromName = LocaleHelper.getEnglishName(journey.from);
+
   journeySummary.add(
-    `The user ${user.name} is learning ${journey.to} language.`
+    `The user ${user.name} is learning ${toName}. User's main language is ${fromName}. All user facing texts MUST be in ${toName}.`
   );
-
-  const initial = journey.paths[pathID].type === "INITIAL";
-
-  if (!initial) {
-    if (includeProgress) {
-      journeySummary.addKv("Progress", (progressMsg) => {
-        const levels = journey.progress.level;
-        const levelsMsg = msg();
-        for (const [key, value] of Object.entries(levels)) {
-          if (value < 0) {
-            levelsMsg.addKv(key, "Unknown");
-          } else {
-            levelsMsg.addKv(key, `${value}%`);
-          }
-        }
-        progressMsg.addKv("Levels", levelsMsg);
-
-        progressMsg.addKv("Observations", (obs) => {
-          const observations = journey.progress.observations;
-          for (const observation of observations) {
-            obs.add(msg(observation));
-          }
-        });
-
-        progressMsg.addKv("Weak Points", (weaknesses) => {
-          const weakPoints = journey.progress.weakPoints;
-          for (const weakPoint of weakPoints) {
-            weaknesses.add(msg(weakPoint));
-          }
-        });
-
-        progressMsg.addKv("Strong Points", (strengths) => {
-          const strongPoints = journey.progress.strongPoints;
-          for (const strongPoint of strongPoints) {
-            strengths.add(msg(strongPoint));
-          }
-        });
-      });
-    }
-
-    if (includeLastMaterials) {
-      const lastMaterials = await Material.find(
-        {
-          journey_ID: journey._id,
-          path_ID: pathID,
-        },
-        {
-          sort: {
-            createdAt: -1,
-          },
-          limit: 10,
-        }
-      );
-
-      const count = lastMaterials.length;
-      journeySummary.addKv(`Last ${count} materials focus`, (materialsMsg) => {
-        for (let i = 0; i < count; i++) {
-          materialsMsg.addKv(
-            `${i + 1}. ${lastMaterials[i].metadata.title}`,
-            summarizeMaterialFocus(lastMaterials[i])
-          );
-        }
-      });
-    }
-  } else {
-    journeySummary.add(
-      "User not started the learning yet. We don't have any information about him. So we will start with the initial test."
-    );
-  }
 
   return journeySummary;
 }

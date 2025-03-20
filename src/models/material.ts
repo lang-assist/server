@@ -7,16 +7,21 @@ import { BrocaTypes } from "../types";
 interface IModel extends TimeFields {
   user_ID: ObjectId;
   journey_ID: ObjectId;
-  pathID: string; // is not ObjectId
+  stage_ID: ObjectId;
+  part_ID: ObjectId;
+  type: BrocaTypes.Material.MaterialType;
   genStatus: "CREATING" | "PREPARING" | "COMPLETED" | "ERROR";
   compStatus: "NOT_STARTED" | "COMPLETED" | "ANALYZING" | "ERROR";
   convStatus: "NOT_STARTED" | "COMPLETED" | "PENDING";
   feedbackStatus: "NOT_STARTED" | "GENERATING" | "COMPLETED" | "ERROR";
   details: BrocaTypes.Material.MaterialDetails;
-  metadata: BrocaTypes.Material.MaterialMetadata;
+  improves: string[];
+  measures: string[];
+  instructions: string;
   assistant?: BrocaTypes.AI.AIAssistant;
   threadId?: string;
   genId: string;
+  is_extra: boolean;
 }
 
 const Model = DbHelper.model<IModel>({

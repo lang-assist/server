@@ -1,0 +1,56 @@
+# import * from "./types.graphql"
+
+input FeedbackRequest {
+  type: FeedbackType!
+  comment: String
+  images: [String!]
+}
+
+type SupportedLocalization {
+  name: String!
+  version: Int!
+}
+
+type LocalizationDocument {
+  language: String!
+  version: Int!
+  translations: JSON!
+}
+
+type PublicQuery {
+  supported_localizations: [SupportedLocalization!]! @resolver(permissions: [])
+
+  localization_document(language: String!): LocalizationDocument!
+    @resolver(permissions: [])
+}
+
+input SetDeviceIdInput {
+  fcm_token: String
+  apns_token: String
+  locales: String
+  ip: String
+  country: String
+  os: String
+  app_version: String
+  forwarded_from: ID
+}
+
+input SetForwardedFromInput {
+  forwarded_from: ID!
+}
+
+input SetFcmTokenInput {
+  fcm_token: String!
+  apns_token: String
+}
+
+type PublicMutation {
+  add_feedback(input: FeedbackRequest!): Boolean!
+    @resolver(permissions: ["/client"])
+
+  set_device_id(input: SetDeviceIdInput!): String!
+
+  set_forwarded_from(id: ID!, input: SetForwardedFromInput!): Boolean!
+
+  set_fcm_token(id: ID!, input: SetFcmTokenInput!): Boolean!
+}

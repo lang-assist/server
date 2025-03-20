@@ -33,6 +33,12 @@ async function combinePromptParts(instructionType) {
     const { role, parts } = partsConfig.instructions[instructionType];
     const combinedParts = [];
 
+    let roleContent = await readPromptPart(partsConfig.files.role);
+
+    roleContent = roleContent.replaceAll("{role}", role);
+
+    combinedParts.push(roleContent);
+
     // Read and combine all specified parts
     for (const partName of parts) {
       const filePath = partsConfig.files[partName];
@@ -58,10 +64,6 @@ async function combinePromptParts(instructionType) {
  */
 async function savePrompt(instructionType, content) {
   try {
-    const role = partsConfig.instructions[instructionType].role;
-
-    content = content.replaceAll("{role}", role);
-
     const outputDir = path.join(__dirname, "combined");
     await fs.mkdir(outputDir, { recursive: true });
 
@@ -100,3 +102,26 @@ module.exports = {
   savePrompt,
   combineAllInstructions,
 };
+
+/**
+ * 
+ * 
+ * ##### `PHONEME`
+
+- Introduces and focuses on specific phonemes (sounds)
+- Used to teach phoneme-to-spelling relationships (how a sound can be written in different ways)
+- Uses International Phonetic Alphabet (IPA) notation to represent the sounds accurately
+- Each PHONEME part should focus on 1-3 phonemes for targeted practice
+- A stage can contain multiple PHONEME parts to build phonological awareness
+- Example:
+  phonems: [/k/, /s/]
+
+The user can interact with the phonemes:
+
+- Can ask for additional example words containing the phoneme
+- Can request pronunciation guidance and tips
+- Can practice minimal pairs (words differing by only the target phoneme)
+- Can ask for common spelling patterns for the phoneme
+- Can request clarification on phonetic notation
+
+ */

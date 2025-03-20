@@ -2,12 +2,12 @@ import { MaterialGenerationContext } from "../ctx";
 import { AnswerContext } from "../ctx";
 import { BaseMaterialTypeHelper } from "./base";
 import { BrocaTypes } from "../../../../types";
-import { msg } from "../../../../utils/prompter";
+import { MessageBuilder, msg } from "../../../../utils/prompter";
 import { removeSSML } from "../../../../utils/remove-ssml";
 type StoryDetails = BrocaTypes.Material.Story.StoryDetails;
 
 export class StoryMaterialTypeHelper extends BaseMaterialTypeHelper {
-  _describeDetails(details: StoryDetails): string {
+  _describeDetails(details: StoryDetails): MessageBuilder {
     const m = msg();
 
     m.addKv("Parts", (sub) => {
@@ -23,7 +23,7 @@ export class StoryMaterialTypeHelper extends BaseMaterialTypeHelper {
       }
     });
 
-    return m.build();
+    return m;
   }
   _describeAnswer(answer: any): string {
     return this.describeQuestionAnswer(answer);

@@ -20,74 +20,13 @@ export namespace BrocaTypes {
 
     export interface Material {
       details: MaterialDetails;
-      metadata: MaterialMetadata;
     }
 
     export interface MaterialDetails {
       type: MaterialType;
-    }
-
-    export interface MaterialMetadata {
-      id: string;
       title: string;
       description: string;
-      estimatedDuration: number; // dakika cinsinden
-      focusAreas: string[]; // simple-present, future-continuous, business, kitchen, etc.
-      focusSkills: string[]; // writing, speaking, etc.
     }
-
-    export const materialMetadataSchema: Schema = {
-      type: "object",
-      properties: {
-        id: {
-          description:
-            "The id of the material. It will be used to match answers and materails. Can be like 'm1', 'm2', 'quiz1', 'conv2' etc.",
-        },
-        type: {
-          type: "string",
-          enum: ["STORY", "QUIZ", "CONVERSATION"],
-        },
-        title: { type: "string" },
-        description: { type: "string" },
-        estimatedDuration: { type: "number" },
-
-        focusAreas: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Focus areas of the material. It will be a grammaer rule, an area of life(business, kitchen, etc.), etc.",
-        },
-        focusSkills: {
-          type: "array",
-          items: {
-            type: "string",
-            enum: [
-              "writing",
-              "speaking",
-              "reading",
-              "listening",
-              "vocabulary",
-              "grammar",
-              "pronunciation",
-              "listening",
-              "speaking",
-              "lettering", // For non-latin alphabets like Chinese, Japanese, Korean, Arabic etc.
-            ],
-          },
-          description:
-            "Skills that the material will focus on. It will be used to generate material.",
-        },
-      },
-      required: [
-        "title",
-        "description",
-        "estimatedDuration",
-        "focusAreas",
-        "focusSkills",
-        "id",
-      ],
-      additionalProperties: false,
-    };
 
     export namespace Conversation {
       export interface ConversationCharacter {
@@ -104,6 +43,7 @@ export namespace BrocaTypes {
         scenarioScaffold: string;
         characters: ConversationCharacter[];
         length: number;
+        practiceInstructions?: string; // Instructions from practice
         voices?: {
           [key: string]: {
             voiceId: string;
@@ -115,6 +55,12 @@ export namespace BrocaTypes {
       export const conversationDetailsSchema: Schema = {
         type: "object",
         properties: {
+          title: {
+            type: "string",
+          },
+          description: {
+            type: "string",
+          },
           instructions: {
             type: "string",
           },
@@ -123,6 +69,10 @@ export namespace BrocaTypes {
           },
           length: {
             type: "number",
+          },
+          practiceInstructions: {
+            type: "string",
+            description: "Instructions from practice",
           },
           characters: {
             type: "array",
@@ -171,7 +121,14 @@ export namespace BrocaTypes {
             maxItems: 5,
           },
         },
-        required: ["instructions", "characters", "scenarioScaffold", "length"],
+        required: [
+          "instructions",
+          "characters",
+          "scenarioScaffold",
+          "length",
+          "title",
+          "description",
+        ],
         additionalProperties: false,
       };
 
@@ -295,11 +252,10 @@ export namespace BrocaTypes {
         | "MULTIPLE_CHOICE"
         | "CHOICE"
         | "TRUE_FALSE"
-        | "FILL_CHOICE"
-        | "FILL_WRITE"
+        | "FILL_BLANK"
         | "MATCHING"
         | "ORDERING"
-        | "TEXT_INPUT_WRITE"
+        | "TEXT_WRITE"
         | "RECORD";
 
       export interface QuizQuestion {
@@ -348,14 +304,14 @@ export namespace BrocaTypes {
         if (
           type === "MULTIPLE_CHOICE" ||
           type === "CHOICE" ||
-          type === "FILL_CHOICE" ||
+          type === "FILL_BLANK" ||
           type === "MATCHING" ||
           type === "ORDERING"
         ) {
           otherProperties.choices = { type: "array", items: questionItemRef };
           requiredProperties.push("choices");
 
-          if (type === "FILL_CHOICE" || type === "MATCHING") {
+          if (type === "FILL_BLANK" || type === "MATCHING") {
             otherProperties.secondaryChoices = {
               type: "array",
               items: questionItemRef,
@@ -398,11 +354,10 @@ export namespace BrocaTypes {
           quizQuestionSchema("MULTIPLE_CHOICE", "QUIZ"),
           quizQuestionSchema("CHOICE", "QUIZ"),
           quizQuestionSchema("TRUE_FALSE", "QUIZ"),
-          quizQuestionSchema("FILL_CHOICE", "QUIZ"),
-          quizQuestionSchema("FILL_WRITE", "QUIZ"),
+          quizQuestionSchema("FILL_BLANK", "QUIZ"),
           quizQuestionSchema("MATCHING", "QUIZ"),
           quizQuestionSchema("ORDERING", "QUIZ"),
-          quizQuestionSchema("TEXT_INPUT_WRITE", "QUIZ"),
+          quizQuestionSchema("TEXT_WRITE", "QUIZ"),
           quizQuestionSchema("RECORD", "QUIZ"),
         ],
       };
@@ -410,6 +365,12 @@ export namespace BrocaTypes {
       export const quizDetailsSchema: Schema = {
         type: "object",
         properties: {
+          title: {
+            type: "string",
+          },
+          description: {
+            type: "string",
+          },
           questions: {
             type: "array",
             items: {
@@ -421,7 +382,7 @@ export namespace BrocaTypes {
             items: quizPreludeSchema,
           },
         },
-        required: ["questions"],
+        required: ["title", "description", "questions"],
         additionalProperties: false,
       };
 
@@ -467,6 +428,12 @@ export namespace BrocaTypes {
       export const storyDetailsSchema: Schema = {
         type: "object",
         properties: {
+          title: {
+            type: "string",
+          },
+          description: {
+            type: "string",
+          },
           parts: {
             type: "array",
             items: {
@@ -486,7 +453,7 @@ export namespace BrocaTypes {
             },
           },
         },
-        required: ["parts"],
+        required: ["title", "description", "parts"],
         additionalProperties: false,
       };
 
@@ -577,6 +544,14 @@ export namespace BrocaTypes {
         | "right";
     }
 
+    export interface RelatedDocumentation {
+      id: string;
+      title: string;
+      searchTerm: string;
+
+      foundId?: string; // internal. refs to doc_searches._id
+    }
+
     export const explanationSchema: Schema = {
       type: "object",
       oneOf: [
@@ -665,7 +640,13 @@ export namespace BrocaTypes {
           type: "array",
           items: { $ref: "#/definitions/Explanation" },
         },
+        practices: {
+          type: "array",
+          items: { $ref: "#/definitions/Practice" },
+        },
       },
+      required: ["title", "description", "includes", "explanations"],
+      additionalProperties: false,
     };
 
     export interface AIGeneratedDocumentation {
@@ -958,7 +939,319 @@ export namespace BrocaTypes {
   }
 
   export namespace Progress {
-    export type PathType = "PROFESSION" | "GENERAL" | "INITIAL";
+    export interface MaterialCreation {
+      type: Material.MaterialType;
+      improves?: string[];
+      measures?: string[];
+      instructions?: string;
+      ref?: string; // reference to the material id. Will be set by the server, not AI.
+    }
+
+    export const materialCreationSchema: Schema = {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["STORY", "QUIZ", "CONVERSATION"] },
+        improves: { type: "array", items: { type: "string" } },
+        measures: { type: "array", items: { type: "string" } },
+        instructions: { type: "string" },
+      },
+      required: ["type", "instructions"],
+      additionalProperties: false,
+    };
+
+    export interface StagePart {
+      type:
+        | "TASK"
+        | "DOCUMENTATION"
+        | "WORDS"
+        | "SENTENCE"
+        // | "PHONEME"
+        | "GRAPHEME";
+      explanation: string;
+      content: {
+        [key: string]: any;
+      };
+    }
+
+    export interface StageTaskPart extends StagePart {
+      type: "TASK";
+      content: MaterialCreation;
+    }
+
+    export interface StageDocumentationPart extends StagePart {
+      type: "DOCUMENTATION";
+      content: {
+        title: string;
+        instructions: string;
+        ref?: string; // reference to the documentation id. Will be set by the server, not AI.
+      };
+    }
+
+    const documentationPartSchema: Schema = {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        instructions: { type: "string" },
+      },
+      required: ["title", "instructions"],
+      additionalProperties: false,
+    };
+
+    export interface StageDictionaryPart extends StagePart {
+      type: "WORDS";
+      content: {
+        words: {
+          word: string;
+          tag?: string; // "animal noun", "adverb", "slang greeting", "food", "be" etc.
+          ref?: string; // reference to the dictionary id. Will be set by the server, not AI.
+        }[];
+      };
+    }
+
+    const dictionaryPartContentSchema: Schema = {
+      type: "object",
+      properties: {
+        words: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              word: { type: "string" },
+              tag: { type: "string" },
+            },
+            required: ["word", "tag"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["words"],
+      additionalProperties: false,
+    };
+
+    export interface StageSentencePart extends StagePart {
+      type: "SENTENCE";
+      content: {
+        sentences: {
+          sentence: string;
+          context: string;
+          ref?: string; // reference to the sentence id. Will be set by the server, not AI.
+        }[];
+      };
+    }
+
+    const sentencePartContentSchema: Schema = {
+      type: "object",
+      properties: {
+        sentences: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              sentence: { type: "string" },
+              instructions: { type: "string" },
+            },
+            required: ["sentence", "instructions"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["sentences"],
+      additionalProperties: false,
+    };
+
+    // export interface StagePhonemePart extends StagePart {
+    //   type: "PHONEME";
+    //   content: {
+    //     phonemes: string[];
+    //   };
+    // }
+
+    const phonemePartContentSchema: Schema = {
+      type: "object",
+      properties: {
+        phonemes: { type: "array", items: { type: "string" } },
+      },
+      required: ["phonemes"],
+      additionalProperties: false,
+    };
+
+    export interface StageGraphemePart extends StagePart {
+      type: "GRAPHEME";
+      content: {
+        graphemes: string[];
+      };
+    }
+
+    const graphemePartContentSchema: Schema = {
+      type: "object",
+      properties: {
+        graphemes: { type: "array", items: { type: "string" } },
+      },
+      required: ["graphemes"],
+      additionalProperties: false,
+    };
+
+    export interface Stage {
+      name: string;
+      description: string;
+      imagePrompt?: string; // AI generated prompt for the image
+
+      focusSkills: string[]; // writing, listening etc.
+      focusAreas: string[]; // present simple tense etc.
+      includedTopics: string[]; // topics included in the stage, daily life, business, kitchen, etc.
+
+      parts: StagePart[];
+    }
+
+    // export interface StageResources {
+    //   docs?: {
+    //     title: string;
+    //     search: string;
+    //     reference?: string; // found search id
+    //   }[];
+    //   sentences?: {
+    //     title: string;
+    //     sentences: string[];
+    //   }[];
+    // }
+
+    // const resourcesSchema: Schema = {
+    //   type: "object",
+    //   properties: {
+    //     docs: {
+    //       type: "array",
+    //       items: {
+    //         type: "object",
+    //         properties: {
+    //           title: { type: "string" },
+    //           search: { type: "string" },
+    //         },
+    //         required: ["title", "search"],
+    //         additionalProperties: false,
+    //       },
+    //     },
+    //     sentences: {
+    //       type: "array",
+    //       items: {
+    //         type: "object",
+    //         properties: {
+    //           title: { type: "string" },
+    //           sentences: { type: "array", items: { type: "string" } },
+    //         },
+    //         required: ["title", "sentences"],
+    //         additionalProperties: false,
+    //       },
+    //     },
+    //   },
+    //   required: ["docs", "sentences"],
+    //   additionalProperties: false,
+    // };
+
+    // hello
+
+    // export interface StageTasks {
+    //   materials: MaterialCreation[];
+    // }
+
+    // const tasksSchema: Schema = {
+    //   type: "object",
+    //   properties: {
+    //     materials: { type: "array", items: materialCreationSchema },
+    //   },
+    //   required: ["materials"],
+    //   additionalProperties: false,
+    // };
+
+    export const stageSchema: Schema = {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        description: { type: "string" },
+        imagePrompt: { type: "string" },
+        focusSkills: { type: "array", items: { type: "string" } },
+        focusAreas: { type: "array", items: { type: "string" } },
+        includedTopics: { type: "array", items: { type: "string" } },
+        parts: {
+          type: "array",
+          items: {
+            oneOf: [
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", const: "TASK" },
+                  explanation: { type: "string" },
+                  content: materialCreationSchema,
+                },
+                required: ["type", "explanation", "content"],
+                additionalProperties: false,
+              },
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", const: "DOCUMENTATION" },
+                  explanation: { type: "string" },
+                  content: documentationPartSchema,
+                },
+                required: ["type", "explanation", "content"],
+                additionalProperties: false,
+              },
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", const: "DICTIONARY" },
+                  explanation: { type: "string" },
+                  content: dictionaryPartContentSchema,
+                },
+                required: ["type", "explanation", "content"],
+                additionalProperties: false,
+              },
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", const: "SENTENCE" },
+                  explanation: { type: "string" },
+                  content: sentencePartContentSchema,
+                },
+                required: ["type", "explanation", "content"],
+                additionalProperties: false,
+              },
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", const: "PHONEME" },
+                  explanation: { type: "string" },
+                  content: phonemePartContentSchema,
+                },
+                required: ["type", "explanation", "content"],
+                additionalProperties: false,
+              },
+              {
+                type: "object",
+                properties: {
+                  type: { type: "string", const: "GRAPHEME" },
+                  explanation: { type: "string" },
+                  content: graphemePartContentSchema,
+                },
+                required: ["type", "explanation", "content"],
+                additionalProperties: false,
+              },
+            ],
+          },
+        },
+      },
+      required: [
+        "name",
+        "description",
+        "parts",
+        "imagePrompt",
+        "focusSkills",
+        "focusAreas",
+        "includedTopics",
+      ],
+      additionalProperties: false,
+    };
+
+    export type PathType = "PROFESSION" | "GENERAL";
 
     export type PathLevel = {
       listening: number; // 0-100
@@ -969,15 +1262,7 @@ export namespace BrocaTypes {
       vocabulary: number; // 0-100
     };
 
-    export type Path = {
-      name: string;
-      type: PathType;
-      profession?: string;
-      isMain: boolean;
-      isActive: boolean;
-    };
-
-    export const pathLevelSchema = {
+    export const pathLevelSchema: Schema = {
       type: "object",
       properties: {
         listening: { type: "number" },
@@ -993,10 +1278,9 @@ export namespace BrocaTypes {
 
     export interface PathProgress {
       level: PathLevel;
-      completedActivities: number;
       weakPoints: string[];
       strongPoints: string[];
-      observations: string[];
+      general: string[];
     }
 
     export const aiObservationEditSchema = {
@@ -1009,18 +1293,19 @@ export namespace BrocaTypes {
         },
         remove: {
           type: "array",
-          items: { type: "string" },
-          description: "The terms to remove",
+          items: { type: "number" },
+          description: "The indexes of the terms to remove",
         },
         replace: {
           type: "array",
           items: {
-            type: "array",
-            items: { type: "string" },
-            minItems: 2,
-            maxItems: 2,
-            description:
-              "The term [old in [0]] to replace and the new term [new in [1]]",
+            type: "object",
+            properties: {
+              index: { type: "number" },
+              replace: { type: "string" },
+            },
+            required: ["index", "replace"],
+            additionalProperties: false,
           },
           additionalProperties: false,
         },
@@ -1030,30 +1315,31 @@ export namespace BrocaTypes {
 
     export interface AIObservationEdit {
       add?: string[];
-      remove?: string[];
-      replace?: string[][];
+      remove?: number[];
+      replace?: {
+        index: number;
+        replace: string;
+      }[];
     }
 
     export interface AIProgressResponse {
-      level: PathLevel | null;
+      newLevel: PathLevel | null;
       weakPoints: AIObservationEdit | null;
       strongPoints: AIObservationEdit | null;
-      observations: AIObservationEdit | null;
+      general: AIObservationEdit | null;
+      notes: string[] | null;
+      successRate: number | null;
     }
 
     export const aiProgressResponseSchema: Schema = {
       type: "object",
       definitions: {
-        PathLevel: pathLevelSchema,
         AIObservationEdit: aiObservationEditSchema,
-        Feedback: Feedback.feedbackSchema,
       },
       properties: {
-        level: {
+        newLevel: {
           oneOf: [
-            {
-              $ref: "#/definitions/PathLevel",
-            },
+            pathLevelSchema,
             {
               type: "null",
             },
@@ -1071,14 +1357,24 @@ export namespace BrocaTypes {
             { type: "null" },
           ],
         },
-        observations: {
+        general: {
           oneOf: [
             { $ref: "#/definitions/AIObservationEdit" },
             { type: "null" },
           ],
         },
+        notes: {
+          type: "array",
+          items: { type: "string" },
+        },
+        successRate: {
+          type: "number",
+          minimum: 0,
+          maximum: 100,
+          multipleOf: 1,
+        },
       },
-      required: ["level", "weakPoints", "strongPoints", "observations"],
+      required: [],
       additionalProperties: false,
     };
   }
@@ -1090,8 +1386,10 @@ export namespace BrocaTypes {
       ? Types.ConversationGenerationResponse
       : T extends "story"
       ? Types.StoryGenerationResponse
-      : T extends "progress"
+      : T extends "analyzer"
       ? Progress.AIProgressResponse
+      : T extends "stager"
+      ? Progress.Stage
       : T extends "conversationTurn"
       ? Material.Conversation.ConversationTurnResponse
       : T extends "linguisticUnits"
@@ -1153,7 +1451,8 @@ export namespace BrocaTypes {
         | "quiz"
         | "conversation"
         | "story"
-        | "progress"
+        | "analyzer"
+        | "stager"
         | "conversationTurn"
         | "linguisticUnits"
         | "documentation"
@@ -1167,17 +1466,14 @@ export namespace BrocaTypes {
 
       export type QuizGenerationResponse = {
         details: Material.Quiz.QuizDetails;
-        metadata: Material.MaterialMetadata;
       };
 
       export type ConversationGenerationResponse = {
         details: Material.Conversation.ConversationDetails;
-        metadata: Material.MaterialMetadata;
       };
 
       export type StoryGenerationResponse = {
         details: Material.Story.StoryDetails;
-        metadata: Material.MaterialMetadata;
       };
 
       export type ConversationTurnResponse =
@@ -1191,7 +1487,8 @@ export namespace BrocaTypes {
         quiz: 1,
         conversation: 1,
         story: 1,
-        progress: 1,
+        analyzer: 1,
+        stager: 1,
         conversationTurn: 1,
         linguisticUnits: 1,
         documentation: 1,
@@ -1207,18 +1504,16 @@ export namespace BrocaTypes {
           definitions: Material.Quiz.quizDetailsDefs,
           properties: {
             details: Material.Quiz.quizDetailsSchema,
-            metadata: Material.materialMetadataSchema,
           },
-          required: ["details", "metadata"],
+          required: ["details"],
           additionalProperties: false,
         },
         conversation: {
           type: "object",
           properties: {
             details: Material.Conversation.conversationDetailsSchema,
-            metadata: Material.materialMetadataSchema,
           },
-          required: ["details", "metadata"],
+          required: ["details"],
           additionalProperties: false,
         },
         story: {
@@ -1226,12 +1521,12 @@ export namespace BrocaTypes {
           definitions: Material.Story.storyDetailsDefs,
           properties: {
             details: Material.Story.storyDetailsSchema,
-            metadata: Material.materialMetadataSchema,
           },
-          required: ["details", "metadata"],
+          required: ["details"],
           additionalProperties: false,
         },
-        progress: Progress.aiProgressResponseSchema,
+        analyzer: Progress.aiProgressResponseSchema,
+        stager: Progress.stageSchema,
         conversationTurn:
           Material.Conversation.aiConversationTurnResponseSchema,
         linguisticUnits: LinguisticUnits.linguisticUnitResponseSchema,

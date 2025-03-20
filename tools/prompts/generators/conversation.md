@@ -49,7 +49,7 @@ It roughly indicates how many turns the conversation will take. It should be bet
 
 Create scenarios for everyday situations. You can create scenarios from every area of everyday life. Cultural awareness. Your scenarios should be small and practical.
 
-### Character Naming
+# Character Naming
 
 Use culturally appropriate names. General tags should not be used (e.g: 'Character A'). Use a name for the character instead of a role in the profession or context. "Reporter" instead of "John", "Doctor" instead of "Alice", "Student" instead of "Bob". The most common names in the community should not be used. Different names should also be used.
 

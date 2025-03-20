@@ -1,0 +1,446 @@
+[
+  {
+    "Id": "63b10bf00a154c61af75a45b016efc11",
+    "RecognitionStatus": 0,
+    "Offset": 10800000,
+    "Duration": 21200000,
+    "Channel": 0,
+    "DisplayText": "I am trying to complete it.",
+    "SNR": 32.80533,
+    "NBest": [
+      {
+        "Confidence": 0.9815092,
+        "Lexical": "i am trying to complete it",
+        "ITN": "i am trying to complete it",
+        "MaskedITN": "i am trying to complete it",
+        "Display": "I am trying to complete it.",
+        "PronunciationAssessment": {
+          "AccuracyScore": 100,
+          "FluencyScore": 100,
+          "ProsodyScore": 88.8,
+          "CompletenessScore": 100,
+          "PronScore": 95.5
+        },
+        "Words": [
+          {
+            "Word": "i",
+            "Offset": 10800000,
+            "Duration": 1900000,
+            "PronunciationAssessment": {
+              "AccuracyScore": 100,
+              "ErrorType": "None",
+              "Feedback": {
+                "Prosody": {
+                  "Break": {
+                    "ErrorTypes": ["None"],
+                    "BreakLength": 0
+                  },
+                  "Intonation": {
+                    "ErrorTypes": ["Monotone"],
+                    "Monotone": {
+                      "SyllablePitchDeltaConfidence": 0.20810635
+                    }
+                  }
+                }
+              }
+            },
+            "Syllables": [
+              {
+                "Syllable": "ay",
+                "Grapheme": "i",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 10800000,
+                "Duration": 1900000
+              }
+            ],
+            "Phonemes": [
+              {
+                "Phoneme": "ay",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 10800000,
+                "Duration": 1900000
+              }
+            ]
+          },
+          {
+            "Word": "am",
+            "Offset": 12800000,
+            "Duration": 1500000,
+            "PronunciationAssessment": {
+              "AccuracyScore": 100,
+              "ErrorType": "None",
+              "Feedback": {
+                "Prosody": {
+                  "Break": {
+                    "ErrorTypes": ["None"],
+                    "UnexpectedBreak": {
+                      "Confidence": 3.7558685e-8
+                    },
+                    "MissingBreak": {
+                      "Confidence": 1
+                    },
+                    "BreakLength": 0
+                  },
+                  "Intonation": {
+                    "ErrorTypes": ["Monotone"],
+                    "Monotone": {
+                      "SyllablePitchDeltaConfidence": 0.20810635
+                    }
+                  }
+                }
+              }
+            },
+            "Syllables": [
+              {
+                "Syllable": "aem",
+                "Grapheme": "am",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 12800000,
+                "Duration": 1500000
+              }
+            ],
+            "Phonemes": [
+              {
+                "Phoneme": "ae",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 12800000,
+                "Duration": 500000
+              },
+              {
+                "Phoneme": "m",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 13400000,
+                "Duration": 900000
+              }
+            ]
+          },
+          {
+            "Word": "trying",
+            "Offset": 14400000,
+            "Duration": 7200000,
+            "PronunciationAssessment": {
+              "AccuracyScore": 100,
+              "ErrorType": "None",
+              "Feedback": {
+                "Prosody": {
+                  "Break": {
+                    "ErrorTypes": ["None"],
+                    "UnexpectedBreak": {
+                      "Confidence": 3.7558685e-8
+                    },
+                    "MissingBreak": {
+                      "Confidence": 1
+                    },
+                    "BreakLength": 0
+                  },
+                  "Intonation": {
+                    "ErrorTypes": ["Monotone"],
+                    "Monotone": {
+                      "SyllablePitchDeltaConfidence": 0.20810635
+                    }
+                  }
+                }
+              }
+            },
+            "Syllables": [
+              {
+                "Syllable": "tray",
+                "Grapheme": "try",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 14400000,
+                "Duration": 4100000
+              },
+              {
+                "Syllable": "ihng",
+                "Grapheme": "ing",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 18600000,
+                "Duration": 3000000
+              }
+            ],
+            "Phonemes": [
+              {
+                "Phoneme": "t",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 14400000,
+                "Duration": 900000
+              },
+              {
+                "Phoneme": "r",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 15400000,
+                "Duration": 900000
+              },
+              {
+                "Phoneme": "ay",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 16400000,
+                "Duration": 2100000
+              },
+              {
+                "Phoneme": "ih",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 18600000,
+                "Duration": 1900000
+              },
+              {
+                "Phoneme": "ng",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 20600000,
+                "Duration": 1000000
+              }
+            ]
+          },
+          {
+            "Word": "to",
+            "Offset": 21700000,
+            "Duration": 1000000,
+            "PronunciationAssessment": {
+              "AccuracyScore": 100,
+              "ErrorType": "None",
+              "Feedback": {
+                "Prosody": {
+                  "Break": {
+                    "ErrorTypes": ["None"],
+                    "UnexpectedBreak": {
+                      "Confidence": 3.7558685e-8
+                    },
+                    "MissingBreak": {
+                      "Confidence": 1
+                    },
+                    "BreakLength": 0
+                  },
+                  "Intonation": {
+                    "ErrorTypes": ["Monotone"],
+                    "Monotone": {
+                      "SyllablePitchDeltaConfidence": 0.20810635
+                    }
+                  }
+                }
+              }
+            },
+            "Syllables": [
+              {
+                "Syllable": "tax",
+                "Grapheme": "to",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 21700000,
+                "Duration": 1000000
+              }
+            ],
+            "Phonemes": [
+              {
+                "Phoneme": "t",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 21700000,
+                "Duration": 400000
+              },
+              {
+                "Phoneme": "ax",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 22200000,
+                "Duration": 500000
+              }
+            ]
+          },
+          {
+            "Word": "complete",
+            "Offset": 22800000,
+            "Duration": 6100000,
+            "PronunciationAssessment": {
+              "AccuracyScore": 100,
+              "ErrorType": "None",
+              "Feedback": {
+                "Prosody": {
+                  "Break": {
+                    "ErrorTypes": ["None"],
+                    "UnexpectedBreak": {
+                      "Confidence": 3.7558685e-8
+                    },
+                    "MissingBreak": {
+                      "Confidence": 1
+                    },
+                    "BreakLength": 0
+                  },
+                  "Intonation": {
+                    "ErrorTypes": ["Monotone"],
+                    "Monotone": {
+                      "SyllablePitchDeltaConfidence": 0.20810635
+                    }
+                  }
+                }
+              }
+            },
+            "Syllables": [
+              {
+                "Syllable": "kaxm",
+                "Grapheme": "com",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 22800000,
+                "Duration": 2500000
+              },
+              {
+                "Syllable": "pliyt",
+                "Grapheme": "plete",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 25400000,
+                "Duration": 3500000
+              }
+            ],
+            "Phonemes": [
+              {
+                "Phoneme": "k",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 22800000,
+                "Duration": 700000
+              },
+              {
+                "Phoneme": "ax",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 23600000,
+                "Duration": 700000
+              },
+              {
+                "Phoneme": "m",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 24400000,
+                "Duration": 900000
+              },
+              {
+                "Phoneme": "p",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 25400000,
+                "Duration": 500000
+              },
+              {
+                "Phoneme": "l",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 26000000,
+                "Duration": 700000
+              },
+              {
+                "Phoneme": "iy",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 26800000,
+                "Duration": 1100000
+              },
+              {
+                "Phoneme": "t",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 28000000,
+                "Duration": 900000
+              }
+            ]
+          },
+          {
+            "Word": "it",
+            "Offset": 29000000,
+            "Duration": 3000000,
+            "PronunciationAssessment": {
+              "AccuracyScore": 100,
+              "ErrorType": "None",
+              "Feedback": {
+                "Prosody": {
+                  "Break": {
+                    "ErrorTypes": ["None"],
+                    "UnexpectedBreak": {
+                      "Confidence": 3.7558685e-8
+                    },
+                    "MissingBreak": {
+                      "Confidence": 1
+                    },
+                    "BreakLength": 0
+                  },
+                  "Intonation": {
+                    "ErrorTypes": ["Monotone"],
+                    "Monotone": {
+                      "SyllablePitchDeltaConfidence": 0.20810635
+                    }
+                  }
+                }
+              }
+            },
+            "Syllables": [
+              {
+                "Syllable": "iht",
+                "Grapheme": "it",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 29000000,
+                "Duration": 3000000
+              }
+            ],
+            "Phonemes": [
+              {
+                "Phoneme": "ih",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 29000000,
+                "Duration": 700000
+              },
+              {
+                "Phoneme": "t",
+                "PronunciationAssessment": {
+                  "AccuracyScore": 100
+                },
+                "Offset": 29800000,
+                "Duration": 2200000
+              }
+            ],
+            "Punctuation": "."
+          }
+        ]
+      }
+    ]
+  }
+]

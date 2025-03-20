@@ -13,7 +13,6 @@ export class ImageGeneration extends Generation<{
     ctx: GenerationContext,
     meta: {
       reason: string;
-      produced: ObjectId;
       [key: string]: any;
     }
   ) {

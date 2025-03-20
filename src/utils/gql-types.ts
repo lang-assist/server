@@ -8,6 +8,9 @@ import {
   ITerms,
   IAiFeedback,
   IModelsSet,
+  IStage,
+  ISupportedLanguage,
+  ISupportedFromLocale,
 } from "../models/_index";
 import { WithGQLID } from "../helpers/db";
 import { BrocaTypes } from "../types";
@@ -47,14 +50,29 @@ export namespace GqlTypes {
   export namespace User {
     export type CreateJourneyInput = {
       to: string;
+      from: string;
       name: string;
       avatar: UploadingHsl;
       modelSet: ObjectId;
+
+      referenceText: string;
+
+      // Şimdi 3 şey test edilecek.
+      // 1. Alfabeyi okuyabiliyor mu? - Reference text'i seslendirerek veya kendi alfabesinde yazarak tekrar etmesi gerekiyor.
+      // 2. Okuduğu cümleleri anlıyor mu? - Reference text'i çevirmesi veya anladığını açıklaması gerekiyor.
+      // 3. Kendini tanıtabiliyor mu? - Introduction'ı okuyabiliyor mu?
+
+      // 1
+      recording: ObjectId | null; // recording preferred
+      repating: string | null; // repeating
+
+      // 2
+      description: string | null; // description or translation
+
+      // 3
+      introduction: string | null;
     };
-    export type CreateJourneyResponse = {
-      journey: WithGQLID<IJourney>;
-      materials: WithGQLID<IMaterial>[];
-    };
+    export type CreateJourneyResponse = WithGQLID<IJourney>;
 
     export type UpdateJourneyInput = {
       name?: string;
@@ -73,6 +91,8 @@ export namespace GqlTypes {
     };
 
     export type AnswerMaterialInput = {
+      stageId: ObjectId;
+      partId: ObjectId;
       materialId: ObjectId;
       answer: JSON;
     };
@@ -95,40 +115,14 @@ export namespace GqlTypes {
 
     export type GenMaterialInput = {
       journeyId: ObjectId;
-      pathId: ObjectId;
+      stageId: ObjectId;
       type: BrocaTypes.Material.MaterialType;
-    };
-
-    export type AnswerMaterialResponseNext =
-      | "CREATING_NEW"
-      | "INITIAL_END"
-      | "INITIAL_CONTINUE";
-
-    export type AnswerMaterialResponse = {
-      next: AnswerMaterialResponseNext;
-      newPath: string | null;
-      newMaterial: ObjectId | null;
-    };
-
-    export type CreatePathResponse = {
-      journey: WithGQLID<IJourney>;
-      path: BrocaTypes.Progress.Path;
-      materials: WithGQLID<IMaterial>[];
     };
   }
 
   export type UserQueryResolvers = {
     my_journeys: ResolverFn<any, any, Connection<WithGQLID<IJourney>>>;
     journey: ResolverFn<any, { id: ObjectId }, WithGQLID<IJourney> | null>;
-    path_materials: ResolverFn<
-      any,
-      {
-        journeyId: ObjectId;
-        pathID: string;
-        pagination?: PaginationInput;
-      },
-      Connection<WithGQLID<IMaterial>>
-    >;
     material: ResolverFn<any, { id: ObjectId }, WithGQLID<IMaterial> | null>;
     conversation_turns: ResolverFn<
       any,
@@ -156,6 +150,22 @@ export namespace GqlTypes {
       IAiFeedback[]
     >;
     model_sets: ResolverFn<any, any, Connection<WithGQLID<IModelsSet>>>;
+    user_doc: ResolverFn<any, { id: ObjectId }, WithGQLID<IUserDoc>>;
+    stage: ResolverFn<
+      any,
+      { journeyId: ObjectId; stageId: ObjectId },
+      WithGQLID<IStage>
+    >;
+    supported_languages: ResolverFn<
+      any,
+      any,
+      Connection<WithGQLID<ISupportedLanguage>>
+    >;
+    supported_locales: ResolverFn<
+      any,
+      any,
+      Connection<WithGQLID<ISupportedFromLocale>>
+    >;
   };
 
   export type UserMutationResolvers = {
@@ -172,13 +182,15 @@ export namespace GqlTypes {
       { id: ObjectId; input: User.UpdateJourneyInput },
       WithGQLID<IJourney>
     >;
-    create_path: ResolverFn<any, User.CreatePathInput, User.CreatePathResponse>;
     answer_material: ResolverFn<
       any,
       {
         input: User.AnswerMaterialInput;
       },
-      User.AnswerMaterialResponse
+      {
+        currentStage: WithGQLID<IStage> | null;
+        newStage: WithGQLID<IStage> | null;
+      }
     >;
     add_user_input: ResolverFn<
       any,
@@ -202,4 +214,6 @@ export namespace GqlTypes {
     >;
     gen_material: ResolverFn<any, User.GenMaterialInput, WithGQLID<IMaterial>>;
   };
+
+  export type UserTypesResolvers = {};
 }

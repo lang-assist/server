@@ -6,6 +6,8 @@ import {
   IMaterial,
   UserAnswer,
   Journey,
+  IStage,
+  IStagePart,
 } from "../../../models/_index";
 
 import { WithId } from "mongodb";
@@ -15,12 +17,20 @@ import { MessageBuilder, msg, PromptBuilder } from "../../../utils/prompter";
 import { ChatGenerationContextWithGlobalAssistant } from "../../ai/chat/base";
 import { AIModels } from "../../../utils/constants";
 import {
+  additionalInstructions,
   describeMaterialAnswer,
   instructions,
   journeySummary,
+  lastStagesSummaries,
+  previousBehaviors,
+  progressSummary,
+  summarizeStageFocus,
 } from "../../prompts";
 import { VoiceManager } from "../../voice";
 import { GenerationContext } from "../../../types/ctx";
+import { WithGQLID } from "../../db";
+import { LanguageHelper } from "../../language";
+import { LocaleHelper } from "../../locale";
 
 // export type MaterialGenSteps =
 //   | "ANALYZING" // Analyzing the material
@@ -35,23 +45,25 @@ import { GenerationContext } from "../../../types/ctx";
 
 export class MaterialFlowContext {
   constructor(args: {
-    journey: WithId<IJourney>;
-    pathID: string;
-    user: WithId<IUser>;
+    journey: WithGQLID<IJourney>;
+    user: WithGQLID<IUser>;
     rawAnswer?: any;
-    answeredMaterial?: WithId<IMaterial>;
+    answeredMaterial?: WithGQLID<IMaterial>;
+    stage: WithGQLID<IStage>;
+    part?: WithGQLID<IStagePart>;
   }) {
     this.journey = args.journey;
-    this.pathID = args.pathID;
+    this.stage = args.stage;
     this.user = args.user;
     this.rawAnswer = args.rawAnswer;
     this.answeredMaterial = args.answeredMaterial;
+    this.part = args.part;
   }
 
   toJSON() {
     return {
       journeyID: this.journey._id,
-      pathID: this.pathID,
+      stageID: this.stage._id,
       userID: this.user._id,
       answeredMaterialID: this.answeredMaterial?._id,
       rawAnswer: this.rawAnswer,
@@ -59,9 +71,10 @@ export class MaterialFlowContext {
     };
   }
 
-  public journey: WithId<IJourney>;
-  public pathID: string;
-  public user: WithId<IUser>;
+  public journey: WithGQLID<IJourney>;
+  public stage: WithGQLID<IStage>;
+  public user: WithGQLID<IUser>;
+  public part?: WithGQLID<IStagePart>;
 
   public answeredMaterial?: WithId<IMaterial>;
   public rawAnswer?: any;
@@ -136,21 +149,17 @@ export class MaterialGenerationContext extends MaterialBaseContext {
       ...super.toJSON(),
       requiredMaterial: {
         type: this.requiredMaterial.type,
-        description: this.requiredMaterial.description,
-        material: this.requiredMaterial.material?._id,
-        metadata: this.requiredMaterial.metadata,
-        details: this.requiredMaterial.details,
+        material: this.requiredMaterial._id,
+        improves: this.requiredMaterial.improves,
+        measures: this.requiredMaterial.measures,
+        instructionsToAI: this.requiredMaterial.instructions,
       },
     };
   }
 
   constructor(args: {
     flow: MaterialFlowContext;
-    requiredMaterial: {
-      type: BrocaTypes.Material.MaterialType;
-      description?: string;
-      material?: WithId<IMaterial>;
-    };
+    requiredMaterial: WithId<IMaterial>;
     reason: string;
   }) {
     let genType: BrocaTypes.AI.Types.MsgGenerationType;
@@ -166,7 +175,9 @@ export class MaterialGenerationContext extends MaterialBaseContext {
         genType = "story";
         break;
       default:
-        throw new AIError("Material type not supported");
+        throw new AIError(
+          "Material type not supported: " + args.requiredMaterial.type
+        );
     }
 
     super({
@@ -179,19 +190,27 @@ export class MaterialGenerationContext extends MaterialBaseContext {
   }
 
   public async setCompleted() {
-    await this._updateMaterial(this.requiredMaterial.type, {
+    await this._updateMaterial({
       genStatus: "COMPLETED",
     });
   }
 
-  public requiredMaterial: {
-    type: BrocaTypes.Material.MaterialType;
-    description?: string;
-    material?: WithId<IMaterial>;
-    details?: BrocaTypes.Material.MaterialDetails;
-    metadata?: BrocaTypes.Material.MaterialMetadata;
-  };
+  public requiredMaterial: WithId<IMaterial>;
 
+  /**
+   * Requeired instructions:
+   *
+   * Main Material Gen Instructions
+   *
+   * Journey Summary
+   *
+   * Progress Summary
+   *
+   * Stage Summary
+   *
+   * AI generated material instructions: improves, measures, instructionsToAI
+   *
+   */
   public async getGenerationPrompt(type: BrocaTypes.Material.MaterialType) {
     const builder = new PromptBuilder();
 
@@ -208,7 +227,7 @@ export class MaterialGenerationContext extends MaterialBaseContext {
         ins = instructions.story;
         break;
       default:
-        throw new AIError("Material type not supported");
+        throw new AIError("");
     }
 
     builder.systemMessage(ins.content, "assistant", ins.version, {
@@ -223,7 +242,9 @@ export class MaterialGenerationContext extends MaterialBaseContext {
       for (const voice of voices ?? []) {
         voicesMsg.addKv(
           `Voice '${voice.shortName}'`,
-          msg().addKv("Styles", voice.styles.join(", "))
+          msg()
+            .addKv("Gender", voice.gender)
+            .addKv("Styles", voice.styles.join(", "))
         );
       }
 
@@ -232,46 +253,56 @@ export class MaterialGenerationContext extends MaterialBaseContext {
 
     const req = msg();
 
-    req.add(
-      await journeySummary(
-        this.flow.journey,
-        this.flow.user,
-        this.flow.pathID,
-        true,
-        true
-      )
+    req.addKv(
+      "Journey",
+      await journeySummary(this.flow.journey, this.flow.user)
     );
 
-    req.add("User needs to generate a material of type " + type);
+    req.addKv("Progress", progressSummary(this.flow.journey));
 
-    if (this.requiredMaterial.description) {
-      req.add(this.requiredMaterial.description);
-    }
+    req.addKv("Stage", summarizeStageFocus(this.flow.stage));
+
+    req.addKv("Generation Instruction:", (g) => {
+      const material = this.requiredMaterial;
+      if (material.improves.length > 0) {
+        g.addKv("Will be improved", material.improves.join(", "));
+      }
+      if (material.measures.length > 0) {
+        g.addKv("Will be measured", material.measures.join(", "));
+      }
+      if (material.instructions) {
+        g.addKv("Instruction", material.instructions);
+      }
+    });
+
+    const journeyToName = LanguageHelper.getEnglishName(this.flow.journey.to);
+
+    req.add(
+      `All user-facing fields (except picture prompts) must be in the target language (${journeyToName}).`
+    );
 
     builder.userMessage(req);
 
     return builder;
   }
 
-  private async _updateMaterial(
-    type: BrocaTypes.Material.MaterialType,
-    updates: Partial<IMaterial>
-  ) {
+  public async _updateMaterial(updates: Partial<IMaterial>) {
     if (!this.requiredMaterial) {
       throw new AIError("Material type not expected");
     }
 
-    const req = this.requiredMaterial;
-
-    if (req.material) {
-      const newMaterial = await Material.findByIdAndUpdate(req.material._id, {
+    const newMaterial = await Material.findByIdAndUpdate(
+      this.requiredMaterial._id,
+      {
         $set: updates,
-      });
-
-      if (!newMaterial) {
-        throw new Error("Material not updated");
       }
+    );
+
+    if (!newMaterial) {
+      throw new Error("Material not updated");
     }
+
+    this.requiredMaterial = newMaterial;
   }
 
   // public async setMeta(meta: BrocaTypes.Material.MaterialMetadata) {
@@ -292,77 +323,111 @@ export class MaterialGenerationContext extends MaterialBaseContext {
   //   }
   // }
 
-  public async setDetails(
-    type: BrocaTypes.Material.MaterialType,
-    metadata: BrocaTypes.Material.MaterialMetadata,
-    material: BrocaTypes.Material.MaterialDetails
-  ) {
+  public async setDetails(material: BrocaTypes.Material.MaterialDetails) {
     if (!this.requiredMaterial) {
       throw new AIError("Material type not expected");
     }
 
-    const req = this.requiredMaterial;
-
-    if (req.material) {
-      await this._updateMaterial(type, {
-        details: material,
-        metadata: metadata,
-        genStatus: "PREPARING",
-      });
-    } else {
-      req.details = material;
-      req.metadata = metadata;
-    }
+    await this._updateMaterial({
+      details: material,
+      genStatus: "PREPARING",
+    });
   }
-
-  // public setMataRequired(args: {
-  //   type: BrocaTypes.Material.MaterialType;
-  //   optional: boolean;
-  //   description?: string;
-  //   material?: WithId<IMaterial>;
-  //   metadata?: BrocaTypes.Material.MaterialMetadata;
-  // }) {
-  //   this.requiredMetas[args.type] = {
-  //     description: args.description,
-  //     optional: args.optional,
-  //     material: args.material,
-  //     metadata: args.metadata,
-  //   };
-  // }
-
-  // private requiredMetas: {
-  //   [key in BrocaTypes.Material.MaterialType]?: {
-  //     metadata?: BrocaTypes.Material.MaterialMetadata;
-  //     details?: BrocaTypes.Material.MaterialDetails;
-  //     material?: WithId<IMaterial>;
-  //     description?: string;
-  //     // promise?: Promise<void>;
-  //     // status:
-  //     //   | "NOT_STARTED"
-  //     //   | "GENERATING"
-  //     //   | "PREPARING"
-  //     //   | "COMPLETED"
-  //     //   | "ERROR";
-  //     optional: boolean;
-  //   };
-  // } = {};
-
-  // public get materialTemplates() {
-  //   return Object.values(this.requiredMetas).map((req) => {
-  //     return {
-  //       metadata: req.metadata!,
-  //       details: req.details!,
-  //     };
-  //   });
-  // }
 }
 
+export class StageGeneratingContext extends MaterialBaseContext {
+  constructor(public flow: MaterialFlowContext, public isInitial: boolean) {
+    super({
+      flow: flow,
+      reason: "stage generating",
+      type: "stager",
+    });
+  }
+
+  /**
+   *
+   * Required Instructions:
+   *
+   * Main Instruction
+   *
+   * Journey Summary
+   *
+   * Progress Summary
+   *
+   * Last Stages Summaries
+   *
+   * Instruction to new stage
+   */
+  public async getStagePrompt() {
+    const builder = new PromptBuilder();
+
+    const ins = instructions.stager;
+
+    builder.systemMessage(ins.content, "assistant", ins.version, {
+      cache: true,
+    });
+
+    const req = msg();
+
+    req.add(await journeySummary(this.flow.journey, this.flow.user));
+
+    req.add(progressSummary(this.flow.journey));
+
+    req.add(await lastStagesSummaries(this.flow.journey));
+
+    if (this.isInitial) {
+      req.add(additionalInstructions.initial_stage);
+    } else {
+      req.add(additionalInstructions.other_stage);
+    }
+
+    builder.userMessage(req);
+
+    return builder;
+  }
+}
+
+// export class StagePreparingContext extends MaterialBaseContext {
+//   constructor(public flow: MaterialFlowContext) {
+//     super({
+//       flow: flow,
+//       reason: "stage preparing",
+//       type: "progress",
+//     });
+//   }
+// }
+
+/**
+ * Mümkün senaryolar:
+ *
+ * 1. Analiz et ve yeni bir stage oluştur.
+ * 2. Sadece analiz et.
+ * 3. Sadece stage oluştur.
+ *
+ * Prompt:
+ *
+ * 1. Analiz et ve yeni bir stage oluştur:
+ *    - main instruction
+ *    - journey summary
+ *    - material and answer
+ *    - old stage topics
+ *
+ * 2. Sadece analiz et:
+ *    - main instruction
+ *    - journey summary
+ *    - material and answer
+ *
+ * 3. Sadece init stage oluştur:
+ *    - main instruction
+ *    - new stage topics - instructions
+ *
+ */
 export class AnalyzingContext extends MaterialBaseContext {
   constructor(public flow: MaterialFlowContext) {
     super({
       flow: flow,
       reason: "analyzing",
-      type: "progress",
+      type: "analyzer",
     });
   }
 
@@ -387,10 +452,24 @@ export class AnalyzingContext extends MaterialBaseContext {
     this.flow.journey = updated;
   }
 
+  /**
+   *
+   * Required Instructions:
+   *
+   * Main Instruction
+   *
+   * Journey Summary
+   *
+   * Progress Summary
+   *
+   * Answered Material and Answer
+   *
+   *
+   */
   public async getAnalysisPrompt() {
     const builder = new PromptBuilder();
 
-    const ins = instructions.progress;
+    const ins = instructions.analyzer;
 
     builder.systemMessage(ins.content, "assistant", ins.version, {
       cache: true,
@@ -398,23 +477,23 @@ export class AnalyzingContext extends MaterialBaseContext {
 
     const req = msg();
 
-    req.add(
-      await journeySummary(
-        this.flow.journey,
-        this.flow.user,
-        this.flow.pathID,
-        false,
-        true
-      )
-    );
+    req.add(await journeySummary(this.flow.journey, this.flow.user));
 
-    if (!this.flow.answeredMaterial || !this.flow.userAnswer) {
+    req.add(progressSummary(this.flow.journey));
+
+    req.addKv("Previous Behaviours", await previousBehaviors(this.flow.stage));
+
+    if (this.flow.answeredMaterial && this.flow.userAnswer) {
+      req.add(
+        describeMaterialAnswer(
+          this.flow.answeredMaterial!,
+          this.flow.userAnswer!,
+          false
+        )
+      );
+    } else {
       throw new Error("Answered material or user answer not found");
     }
-
-    req.add(
-      describeMaterialAnswer(this.flow.answeredMaterial!, this.flow.userAnswer!)
-    );
 
     builder.userMessage(req);
 
@@ -450,6 +529,18 @@ export class FeedbackContext extends MaterialBaseContext {
     });
   }
 
+  /**
+   *
+   * Required Instructions:
+   *
+   * Main Instruction
+   *
+   * Journey Summary
+   *
+   * Answered Material and Answer
+   *
+   *
+   */
   public async getFeedbackPrompt() {
     const builder = new PromptBuilder();
 
@@ -461,22 +552,24 @@ export class FeedbackContext extends MaterialBaseContext {
 
     const req = msg();
 
-    req.add(
-      await journeySummary(
-        this.flow.journey,
-        this.flow.user,
-        this.flow.pathID,
-        false,
-        false
-      )
-    );
+    req.add(await journeySummary(this.flow.journey, this.flow.user));
 
     if (!this.flow.answeredMaterial || !this.flow.userAnswer) {
       throw new Error("Answered material or user answer not found");
     }
 
     req.add(
-      describeMaterialAnswer(this.flow.answeredMaterial!, this.flow.userAnswer!)
+      describeMaterialAnswer(
+        this.flow.answeredMaterial!,
+        this.flow.userAnswer!,
+        false
+      )
+    );
+
+    const journeyToName = LanguageHelper.getEnglishName(this.flow.journey.to);
+
+    req.add(
+      `All user-facing fields must be in the target language (${journeyToName}).`
     );
 
     builder.userMessage(req);

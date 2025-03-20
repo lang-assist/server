@@ -51,14 +51,14 @@ export class MaterialGenerationHelper {
   } = {};
 
   static async gen(ctx: MaterialGenerationContext): Promise<void> {
-    const pathId = ctx.flow.pathID;
+    const materialId = ctx.requiredMaterial._id.toString();
 
-    if (this.generatingMaterials[pathId]) {
-      await this.generatingMaterials[pathId].waitUntil("completed");
+    if (this.generatingMaterials[materialId]) {
+      await this.generatingMaterials[materialId].waitUntil("generated");
       return;
     }
 
-    this.generatingMaterials[pathId] = ctx;
+    this.generatingMaterials[materialId] = ctx;
 
     try {
       ctx.startGeneration();
@@ -74,32 +74,27 @@ export class MaterialGenerationHelper {
       ctx.rawResponse = aiRes;
 
       const details = undefinedOrValue(aiRes.details, null);
-      const metadata = undefinedOrValue(aiRes.metadata, null);
 
       if (!details) {
         throw new Error("Material not found");
       }
 
-      if (!metadata) {
-        throw new Error("Metadata not found");
-      }
+      const prepRes = BaseMaterialTypeHelper.prepare(ctx, details);
 
-      const prepRes = BaseMaterialTypeHelper.prepare(ctx, details, metadata);
-
-      await ctx.setDetails(
-        ctx.requiredMaterial.type,
-        prepRes.metadata,
-        prepRes.details
-      );
+      await ctx.setDetails(prepRes.details);
 
       ctx.addPostGen(...prepRes.promises);
 
       await ctx.complete();
+
+      await ctx._updateMaterial({
+        genStatus: "COMPLETED",
+      });
     } catch (e) {
       ctx.addError(e as Error);
       throw e;
     } finally {
-      delete this.generatingMaterials[ctx.flow.pathID];
+      delete this.generatingMaterials[materialId];
     }
   }
 }

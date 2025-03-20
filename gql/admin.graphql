@@ -1,0 +1,15 @@
+# import * from "./types.graphql"
+
+
+type AdminQuery {
+    hello: String!
+    @resolver(permissions: [])
+}
+
+type AdminMutation {
+    hello: String!
+    @resolver(permissions: [])
+}
+
+
+

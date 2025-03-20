@@ -1,13 +1,13 @@
 import { BaseMaterialTypeHelper } from "./base";
 import { AnswerContext, MaterialGenerationContext } from "../ctx";
 import { BrocaTypes } from "../../../../types";
-import { msg } from "../../../../utils/prompter";
+import { MessageBuilder, msg } from "../../../../utils/prompter";
 import { removeSSML } from "../../../../utils/remove-ssml";
 
 type QuizDetails = BrocaTypes.Material.Quiz.QuizDetails;
 
 export class QuizMaterialTypeHelper extends BaseMaterialTypeHelper {
-  _describeDetails(details: QuizDetails): string {
+  _describeDetails(details: QuizDetails): MessageBuilder {
     const m = msg();
 
     const preludes = details.preludes;
@@ -32,7 +32,7 @@ export class QuizMaterialTypeHelper extends BaseMaterialTypeHelper {
 
     m.addKv("Questions", this.describeQuestions(details.questions));
 
-    return m.build();
+    return m;
   }
 
   _describeAnswer(answer: BrocaTypes.Material.Quiz.QuizAnswer): string {

@@ -25,6 +25,8 @@ import { BrocaTypes } from "./types";
 import { AIModels } from "./utils/constants";
 import Decimal from "decimal.js";
 import { GlobalAssistantManager } from "./helpers/assistant";
+import { LanguageHelper } from "./helpers/language";
+import { LocaleHelper } from "./helpers/locale";
 
 function millionTokenPrice(prices: {
   input: number;
@@ -114,6 +116,8 @@ export async function initServices() {
     QUIZ: new QuizMaterialTypeHelper(),
     STORY: new StoryMaterialTypeHelper(),
   });
+  await LanguageHelper.init();
+  await LocaleHelper.init();
   await GlobalAssistantManager.init();
   await VectorDBBase.init([new MongoDBVectorDB(), new RedisVectorDB()]);
   await AIModel.init({
@@ -202,9 +206,15 @@ export async function initServices() {
     }),
 
     // Image
-    fal_flux_schnell: new FalImgGen("fal-ai/flux/schnell", 333),
-    fal_sana: new FalImgGen("fal-ai/sana", 1000),
-
+    fal_flux_schnell: new FalImgGen("fal-ai/flux/schnell", {
+      forOneDollar: 333,
+    }),
+    fal_sana: new FalImgGen("fal-ai/sana", {
+      forOneDollar: 1000,
+    }),
+    fal_fast_sdxl: new FalImgGen("fal-ai/fast-sdxl", {
+      perSecond: 0.0003,
+    }),
     // Embedding
     text_embedding_3_large: new OpenAIEmbedding(
       "text-embedding-3-large",

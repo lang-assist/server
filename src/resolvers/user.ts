@@ -4,7 +4,6 @@ import {
   Journey,
   Material,
   ConversationTurn,
-  InitialTemplate,
   UserAnswer,
   UserDoc,
   AiFeedback,
@@ -12,20 +11,54 @@ import {
   IUserDoc,
   IMaterial,
   IJourney,
+  Stage,
+  IStage,
+  IStagePart,
 } from "../models/_index";
 import { AppContext, AppResolvers, checkAuth } from "../utils/types";
 import ApiError from "../utils/error";
 import { DbHelper, ObjectId, WithGQLID, WithId } from "../helpers/db";
 import { TermManager } from "../helpers/gen/term";
-import { DocumentationManager } from "../helpers/gen/documentation";
 import { FeedbackHelper } from "../helpers/gen/materials/feedback";
 import { ProgressHelper } from "../helpers/gen/materials/progress";
 import { ConversationManager } from "../helpers/gen/materials/conversation";
 import { BrocaTypes } from "../types";
 import { GqlTypes } from "../utils/gql-types";
 import { MaterialGenerationHelper } from "../helpers/gen/materials/generation";
+import { MaterialFlowContext } from "../helpers/gen/materials/ctx";
+import { MaterialGenerationContext } from "../helpers/gen/materials/ctx";
+import { COLLECTIONS } from "../utils/constants";
+import { GlobalDocumentationManager } from "../helpers/gen/documentation";
+import { LanguageHelper } from "../helpers/language";
+import { LocaleHelper } from "../helpers/locale";
 
 export const userQueries: GqlTypes.UserQueryResolvers = {
+  supported_languages: async (_, args, context) => {
+    checkAuth(context);
+
+    const res = LanguageHelper.getSupportedLanguages();
+
+    return {
+      items: res,
+      pageInfo: {
+        hasNextPage: false,
+        nextCursor: null,
+      },
+    };
+  },
+  supported_locales: async (_, args, context) => {
+    checkAuth(context);
+
+    const res = LocaleHelper.getSupportedLocales();
+
+    return {
+      items: res,
+      pageInfo: {
+        hasNextPage: false,
+        nextCursor: null,
+      },
+    };
+  },
   my_journeys: async (_, args, context) => {
     checkAuth(context);
 
@@ -43,6 +76,26 @@ export const userQueries: GqlTypes.UserQueryResolvers = {
 
     return res;
   },
+  stage: async (_, args, context) => {
+    checkAuth(context);
+
+    const { journeyId, stageId } = args;
+
+    const gen = ProgressHelper.getGeneratingStage(journeyId, stageId);
+
+    if (gen) {
+      await gen.waitUntil("generated");
+      return gen.flow.stage;
+    }
+
+    const res = await Stage.findById(stageId);
+
+    if (!res) {
+      throw new Error("Stage not found");
+    }
+
+    return res;
+  },
   journey: async (_, args, context) => {
     checkAuth(context);
 
@@ -57,14 +110,49 @@ export const userQueries: GqlTypes.UserQueryResolvers = {
   material: async (_, args, context) => {
     checkAuth(context);
 
+    let res = await Material.findById(args.id);
+
+    if (!res) {
+      throw new Error("Material not found");
+    }
+
     const gen =
       MaterialGenerationHelper.generatingMaterials[args.id.toHexString()];
 
     if (gen) {
       await gen.waitUntil("generated");
-    }
+    } else if (res.genStatus === "CREATING" && !gen) {
+      const journey = await Journey.findById(res.journey_ID);
+      if (!journey) {
+        throw new Error("Journey not found");
+      }
+      const stage = await Stage.findById(res.stage_ID);
+      if (!stage) {
+        throw new Error("Stage not found");
+      }
+      const flow = new MaterialFlowContext({
+        journey: journey,
+        user: context.user!,
+        stage: stage,
+      });
 
-    const res = await Material.findById(args.id);
+      const ctx = new MaterialGenerationContext({
+        flow,
+        requiredMaterial: res,
+        reason: "re-generate-material",
+      });
+
+      MaterialGenerationHelper.gen(ctx);
+
+      await ctx.waitUntil("generated");
+      console.log("generated reached");
+
+      res = await Material.findById(args.id);
+
+      if (!res) {
+        throw new Error("Material not found");
+      }
+    }
 
     return res;
   },
@@ -90,23 +178,6 @@ export const userQueries: GqlTypes.UserQueryResolvers = {
     return res;
   },
 
-  path_materials: async (_, args, context) => {
-    checkAuth(context);
-
-    const r = await paginate<WithGQLID<IMaterial>>(
-      "materials",
-      args.pagination,
-      {
-        additionalQuery: {
-          pathID: args.pathID,
-          journey_ID: args.journeyId,
-        },
-      }
-    );
-
-    return r;
-  },
-
   parsed_units: async (_, args, context) => {
     checkAuth(context);
 
@@ -125,7 +196,7 @@ export const userQueries: GqlTypes.UserQueryResolvers = {
       throw new Error("Journey not found");
     }
 
-    const res = await DocumentationManager.findOrCreateDocumentation({
+    const res = await GlobalDocumentationManager.findOrCreateDocumentation({
       journey,
       title: args.input.title,
       searchTerm: args.input.searchTerm,
@@ -140,7 +211,7 @@ export const userQueries: GqlTypes.UserQueryResolvers = {
     checkAuth(context);
 
     const res = await paginate<WithGQLID<IUserDoc>>(
-      "user-doc",
+      COLLECTIONS.USER_DOCS,
       args.pagination,
       {
         additionalQuery: {
@@ -180,35 +251,24 @@ export const userQueries: GqlTypes.UserQueryResolvers = {
       },
     };
   },
+  user_doc: async (_, args, context) => {
+    checkAuth(context);
+
+    const res = await UserDoc.findById(args.id);
+
+    if (!res) {
+      throw new Error("User doc not found");
+    }
+
+    return res;
+  },
 };
-
-function modifyJourney(journey: WithId<IJourney>) {
-  const paths: BrocaTypes.Progress.Path[] = [];
-
-  for (const [key, value] of Object.entries(journey.paths)) {
-    paths.push({
-      ...value,
-      // @ts-ignore
-      id: key,
-    });
-  }
-
-  const res = {
-    ...journey,
-    paths,
-  };
-
-  return res;
-}
 
 export const userMutations: GqlTypes.UserMutationResolvers = {
   create_journey: async (_, args, context) => {
     checkAuth(context);
 
     const res = await JourneyHelper.createJourney(context.user!, args.input);
-
-    // @ts-ignore
-    res.journey = modifyJourney(res.journey);
 
     return res;
   },
@@ -338,14 +398,6 @@ export const userMutations: GqlTypes.UserMutationResolvers = {
   ): Promise<WithGQLID<IJourney>> {
     throw new Error("Function not implemented.");
   },
-  create_path: function (
-    parent: any,
-    args: GqlTypes.User.CreatePathInput,
-    context: AppContext,
-    info: any
-  ): Promise<GqlTypes.User.CreatePathResponse> {
-    throw new Error("Function not implemented.");
-  },
   clear_conversation: function (
     parent: any,
     args: { materialId: ObjectId },
@@ -417,6 +469,29 @@ export const userResolvers: AppResolvers = {
       return resolvedType;
     },
   },
+  Stage: {
+    stagePart: async (parent) => {
+      return await paginate<WithGQLID<IStagePart>>(
+        COLLECTIONS.STAGE_PARTS,
+        {
+          limit: 1000,
+          sort: "createdAt:asc",
+        },
+        {
+          additionalQuery: {
+            hidden: false,
+            stage_ID: parent._id,
+          },
+        }
+      );
+    },
+  },
+
+  MaterialCreation: {
+    material: async (parent) => {
+      return await Material.findById(new ObjectId(parent.id as string));
+    },
+  },
 
   QuestionItem: {
     hasPicture: (parent) => {
@@ -434,23 +509,12 @@ export const userResolvers: AppResolvers = {
     },
   },
   Journey: {
-    paths: (parent) => {
-      if (!parent.paths) return [];
-      if (Array.isArray(parent.paths)) {
-        return parent.paths;
-      }
-
-      const res: BrocaTypes.Progress.Path[] = [];
-
-      for (const [key, value] of Object.entries(parent.paths)) {
-        res.push({
-          // @ts-ignore
-          ...value,
-          id: key,
-        });
-      }
-
-      return res;
+    stages: async (parent, args) => {
+      return paginate<WithGQLID<IStage>>(COLLECTIONS.STAGES, args.pagination, {
+        additionalQuery: {
+          journey_ID: parent._id,
+        },
+      });
     },
   },
   Material: {

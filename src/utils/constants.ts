@@ -46,6 +46,18 @@ export const COLLECTIONS = {
   USER_DOCS: "user_docs",
   VERIFICATIONS: "verifications",
   VOICES: "voices",
+  STAGES: "stages",
+  AZURE_RESULTS: "azure_results",
+  STAGE_PARTS: "stage_parts",
+  ITEM_REFS: "item_refs",
+  DOCS: "docs",
+  DICT_ITEMS: "dict_items",
+  SENTENCE_ITEMS: "sentence_items",
+  USER_ACTIONS: "user_actions",
+  SUPPORTED_LANGUAGES: "supported_languages",
+  SUPPORTED_FROM_LOCALES: "supported_from_locales",
+  GLOBAL_GRAPHEMES: "global_graphemes",
+  GLOBAL_PHONEMES: "global_phonemes",
 } as const;
 
 export type COLLECTION_TYPE = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];
@@ -201,6 +213,7 @@ export const AIModels = {
   img: {
     fal_flux_schnell: "fal_flux_schnell",
     fal_sana: "fal_sana",
+    fal_fast_sdxl: "fal_fast_sdxl",
   },
   tts: {
     azure_tts: "azure_tts",

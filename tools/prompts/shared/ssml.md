@@ -55,3 +55,13 @@ attributes:
 
 - style: e.g "sad", "happy". Available styles for each voice will be provided to you.
 - styledegree: 0-2 (default 1)
+
+### Phoneme
+
+Use phoneme tag to pronounce the text. Always use ipa alphabet. Only use when a phoneme or grapheme needs to be pronounced.
+
+```xml
+<phoneme alphabet="ipa" ph="k"> c </phoneme>
+<phoneme alphabet="ipa" ph="k"> k </phoneme>
+<phoneme alphabet="ipa" ph="ʃ"> sh </phoneme>
+```

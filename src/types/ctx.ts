@@ -5,9 +5,10 @@
 // // > {
 // //   constructor(public context: C, public type: T) {}
 
+import { ObjectId } from "mongodb";
 import { BrocaTypes } from ".";
 import { log } from "../helpers/log";
-import { GenCtx } from "../models/_index";
+import { GenCtx, IGenCtx } from "../models/_index";
 import { AIError, AIRateLimitError, MultipleAIError } from "../utils/ai-types";
 import { Completer, createCompleter } from "../utils/completer";
 import { AIModels, settlePromises } from "../utils/constants";
@@ -514,6 +515,47 @@ export abstract class GenerationContext {
     }
   }
 
+  private _id: ObjectId | null = null;
+
+  private _saving: Promise<void> | null = null;
+
+  private async _save() {
+    if (this._saving) {
+      await this._saving;
+    }
+
+    this._saving = new Promise(async (resolve, reject) => {
+      try {
+        const { usages, totalCosts, total } = this.usageInfo;
+
+        const data: Partial<IGenCtx> = {
+          errors: this._errors,
+          status: this._status,
+          reason: this.reason,
+          data: this.toJSON(),
+          usages,
+          totalCosts,
+          total,
+        };
+
+        if (!this._id) {
+          const res = await GenCtx.insertOne(data);
+          if (!res) {
+            throw new Error("Failed to save generation context");
+          }
+          this._id = res._id;
+        } else {
+          await GenCtx.findByIdAndUpdate(this._id, {
+            $set: data,
+          });
+        }
+        resolve();
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
   private _postGens: Promise<any>[] = [];
 
   public addPostGen(...gens: Promise<any>[]) {
@@ -527,22 +569,15 @@ export abstract class GenerationContext {
   }
 
   private setStatusReached(status: AllStatus) {
-    if (this._statusReached(status)) {
-      log.error("Status already reached", { status, current: this._status });
-      throw new Error("Status already reached");
-    }
-
     this._status = status;
+
+    this._save();
 
     if (this._statusListeners[status]) {
       this._statusListeners[status].forEach((cb) => cb());
     }
-    if (
-      status === "completed" ||
-      status === "pre-gen-error" ||
-      status === "post-gen-error" ||
-      status === "generating-error"
-    ) {
+
+    if (status.endsWith("error")) {
       const completers = this._completers;
 
       for (const key in completers) {
@@ -551,23 +586,27 @@ export abstract class GenerationContext {
           if (completer.isCompleted) {
             continue;
           }
-          if (status === "completed") {
+          completer.completeError(new Error(status));
+        }
+      }
+    } else {
+      if (this._statusReached(status)) {
+        log.error("Status already reached", { status, current: this._status });
+      }
+      const index = statuses.indexOf(status);
+
+      if (index > 0) {
+        for (let i = 0; i <= index; i++) {
+          const completer = this._completers[statuses[i] as AllStatus];
+          if (completer) {
+            if (completer.isCompleted) {
+              continue;
+            }
+
             completer.complete();
-          } else {
-            completer.completeError(new Error(status));
           }
         }
       }
-
-      const { usages, totalCosts, total } = this.usageInfo;
-      GenCtx.insertOne({
-        usages,
-        totalCosts,
-        total,
-        errors: this._errors,
-        status: this._status,
-        data: this.toJSON(),
-      });
     }
   }
 
@@ -616,10 +655,10 @@ export abstract class GenerationContext {
     this._usages.push({ usage, pricing, genType, meta });
   }
 
-  private onStatus(status: AllStatus, callback: () => void) {
-    this._statusListeners[status] = this._statusListeners[status] || [];
-    this._statusListeners[status].push(callback);
-  }
+  // private onStatus(status: AllStatus, callback: () => void) {
+  //   this._statusListeners[status] = this._statusListeners[status] || [];
+  //   this._statusListeners[status].push(callback);
+  // }
 
   private async statusCompleter(status: NormalStatus) {
     if (this._status === status) {
@@ -640,18 +679,18 @@ export abstract class GenerationContext {
     await this._completers[status]!.future;
   }
 
-  private async anyStatusCompleter(statusses: NormalStatus[]) {
-    await new Promise<void>((resolve) => {
-      let resolved = false;
-      statusses.forEach(async (status) => {
-        await this.statusCompleter(status);
-        if (!resolved) {
-          resolved = true;
-          resolve();
-        }
-      });
-    });
-  }
+  // private async anyStatusCompleter(statusses: NormalStatus[]) {
+  //   await new Promise<void>((resolve) => {
+  //     let resolved = false;
+  //     statusses.forEach(async (status) => {
+  //       await this.statusCompleter(status);
+  //       if (!resolved) {
+  //         resolved = true;
+  //         resolve();
+  //       }
+  //     });
+  //   });
+  // }
 
   public async waitUntil(status: NormalStatus) {
     if (statuses.indexOf(status) > statuses.indexOf(this._status)) {

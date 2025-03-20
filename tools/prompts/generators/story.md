@@ -19,7 +19,9 @@ An array of story parts. Each part "../new/generators"contains:
 `questions` Array of questions for 'QUESTION' type. Same structure as QUIZ questions.
 
 Must reference previous story parts
-Should test comprehension of the story so far
+Should test comprehension of the story so far.
+
+Last part should be a question!
 
 ### Story Guidelines
 
@@ -31,7 +33,7 @@ Questions: Test comprehension of previous parts. Build on story context. Encoura
 
 ### Best Practices
 
-Narrative Flow: Break story into small, digestible audio pieces. Each audio part should be one complete sentence. Maintain logical progression. Create anticipation and engagement. Use pauses effectively with questions. Add pictures before the consecutive or long audio blocks if possible. The user can visualize the image better by seeing it while listening to the audio.
+Flow: Break story into small, digestible audio pieces. Each audio part should be one complete sentence. Maintain logical progression. Create anticipation and engagement. Use pauses effectively with questions. Add pictures before the consecutive or long audio blocks if possible. The user can visualize the image better by seeing it while listening to the audio.
 
 Question Integration: Strategically place questions throughout the story. Ensure they test comprehension of previous parts. Build on story context. Encourage critical thinking. Support language learning goals.
 
@@ -62,10 +64,22 @@ Character Dialogue: ONLY use character voices for direct speech. Each character 
 
 Narrator (VERY Limited Use): Only when absolutely necessary for context. Maximum one sentence. Never describe character actions or feelings. Use SSML for voice styles (VOICE GUIDELINES)
 
+BAD:
+
+part1: 'Mehmet says: "Hello, how are you?"'
+
+GOOD:
+
+part1: "Mehmet in the car at the beach" with voice 1 (narrator)
+part2: "Hello, how are you?" with voice 2 (Mehmet)
+part3: "I'm good, thanks!" with voice 3 (Another character)
+
 Voice Assignments: Each character has ONE consistent voice. Use appropriate styles for emotions. Never mix character and narrator roles.
 
-Dialogue Rules: Characters speak naturally. Use direct speech only. Show emotions through dialogue. No "said", "replied", "asked" tags. No third-person descriptions.
+Dialogue Rules: Characters speak naturally. Use direct speech only. Show emotions through dialogue. NO "said", "replied", "asked" tags. NO third-person descriptions.
 
 Story Structure: Story progresses through dialogue. Characters react to each other. Environment revealed through character observations. Actions described through character speech. Emotions conveyed through voice styles.
 
 Remember: Let characters tell the story. Avoid narrative descriptions. Use natural dialogue. Show don't tell through speech. Keep character voices consistent.
+
+A story should include at least 15-20 parts and 5-10 questions. Make sure it is educational and engaging.

@@ -1,10 +1,10 @@
 import { ObjectId } from "mongodb";
-import { Anthropic } from "@anthropic-ai/sdk";
+import { Anthropic, AnthropicError, RateLimitError } from "@anthropic-ai/sdk";
 import { AIModel } from "../../../types/ctx";
 import { ChatGeneration } from "./base";
 import { PromptBuilder } from "../../../utils/prompter";
 import { BrocaTypes } from "../../../types";
-import { AIError } from "../../../utils/ai-types";
+import { AIError, AIRateLimitError } from "../../../utils/ai-types";
 import { Chatgpt_event, Prompts } from "../../../models/_index";
 import { Schema } from "jsonschema";
 
@@ -59,7 +59,7 @@ export class ClaudeModel extends AIModel<ChatGeneration<any>> {
     try {
       const { context, messages } = builder.buildForClaude();
 
-      const prompt = await Prompts.insertOne({
+      await Prompts.insertOne({
         genId: "claude",
         messages: messages,
         system: context,
@@ -114,6 +114,15 @@ export class ClaudeModel extends AIModel<ChatGeneration<any>> {
         throw new AIError("Failed to generate response", null, res);
       }
     } catch (e) {
+      if (e instanceof AnthropicError) {
+        if (e instanceof RateLimitError) {
+          throw new AIRateLimitError(
+            "Rate limit exceeded",
+            (Number(e.headers["retry-after"]) ?? 0) * 1000 + Date.now()
+          );
+        }
+      }
+
       throw e;
     }
   }

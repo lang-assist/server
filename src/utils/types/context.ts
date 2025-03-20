@@ -11,6 +11,7 @@ import { PermissionManager } from "../permission";
 import { WithId } from "mongodb";
 import { IDevice } from "../../models/_index";
 import { IResolvers } from "@graphql-tools/utils";
+import { WithGQLID } from "../../helpers/db";
 
 export type AppResolvers<
   S extends any = any,
@@ -44,11 +45,11 @@ export interface AppContext extends BaseContext {
   res?: Response;
   admin_permission?: PermissionManager;
   user_permission?: PermissionManager;
-  device?: WithId<IDevice>;
-  user?: WithId<IUser>;
-  auth?: WithId<IAuth>;
-  token?: WithId<IToken>;
-  admin?: WithId<IAdmin>;
+  device?: WithGQLID<IDevice>;
+  user?: WithGQLID<IUser>;
+  auth?: WithGQLID<IAuth>;
+  token?: WithGQLID<IToken>;
+  admin?: WithGQLID<IAdmin>;
   auth_checked?: boolean;
 }
 
