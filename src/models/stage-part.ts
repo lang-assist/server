@@ -6,7 +6,7 @@ interface IModel extends CreatedAtField {
   stage_ID: ObjectId;
   hidden: boolean;
 
-  type: "TASK" | "DOCUMENTATION" | "SENTENCES" | "WORDS";
+  type: "TEST" | "DOCUMENTATION" | "SENTENCES" | "WORDS" | "GRAPHEMES";
   explanation: string;
 
   // for task
@@ -39,6 +39,14 @@ interface IModel extends CreatedAtField {
   sentences: {
     sentence: string;
     context: string;
+    ref_ID?: ObjectId;
+    practices?: string[]; // ObjectIds of Materials
+    use_cases?: string[]; // ObjectIds of UserDocs
+  }[];
+
+  // for graphemes
+  graphemes: {
+    grapheme: string;
     ref_ID?: ObjectId;
     practices?: string[]; // ObjectIds of Materials
     use_cases?: string[]; // ObjectIds of UserDocs

@@ -8,7 +8,7 @@ You will generate tasks according to the given user learning profile. These task
 
 A "stage" is a collection of practice resources (words, sentences, documentations, etc.) and tasks that are designed to help the user learn a specific language skill or concept.
 
-Stage parts are shown to users step by step. When the user completes the tasks in the parts, the next step is moved on. The content of each part is generally determined in advance. One of the part types is "task". How a task will be created, what it will develop and what it will measure are determined in advance and these are communicated to you.
+Stage parts are shown to users step by step. When the user completes the tasks in the parts, the next step is moved on. The content of each part "../shared"is generally determined in advance. One of the part "../shared"types is "task". How a task will be created, what it will develop and what it will measure are determined in advance and these are communicated to you.
 
 Additionally, the user's behavior in previous steps of the stage is also reported when the task is created.
 

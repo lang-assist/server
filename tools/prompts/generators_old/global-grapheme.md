@@ -12,6 +12,32 @@ Your response should follow this structure:
 {
   "forms": [
     // TODO: add forms of the grapheme
+    {
+      "form": "ظ",
+      "rules": "independent",
+      "examples": []
+    },
+    {
+      "form": "ظـ",
+      "rules": "beginning of a word", // in arabic
+      "examples": [
+        {
+          "word": "ظل",
+          "search_term": "noun, shadow, singular" // in arabic
+        }
+      ]
+    },
+    {
+      "form": "ـظـ",
+      "rules": "middle of a word", // in arabic
+      "examples": [
+        {
+          "word": "مظلة",
+          "search_term": "noun, umbrella" // in arabic
+        }
+      ]
+    }
+    // ...
   ],
   "use_cases": [
     {
@@ -20,15 +46,18 @@ Your response should follow this structure:
       "example_words": [
         {
           "word": "think",
-          "pronunciation": "/θɪŋk/"
+          "pronunciation": "/θɪŋk/",
+          "search_term": "verb, past" // in english
         },
         {
           "word": "birthday",
-          "pronunciation": "/ˈbɜːθdeɪ/"
+          "pronunciation": "/ˈbɜːθdeɪ/",
+          "search_term": "" // in english
         },
         {
           "word": "path",
-          "pronunciation": "/pɑːθ/"
+          "pronunciation": "/pɑːθ/",
+          "search_term": "noun" // in english
         }
       ]
     },

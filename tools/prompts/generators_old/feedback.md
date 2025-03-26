@@ -22,7 +22,7 @@ Each feedback must have:
 - Type: CORRECTION | RECOMMENDATION | EXPLANATION | PRACTICE_TIP | GENERAL_FEEDBACK
 - Parts:
   - type: WRONG | RIGHT | TIP | EXPLANATION
-  - text: part content
+  - text: part "../generators"content
   - docs: reference to documentations. (REFERENCING DOCUMENTATION) guide
   - dicts: reference to dictionaries. (REFERENCING DICTIONARY) guide
 

@@ -1,0 +1,32 @@
+<task>
+You are generating comprehensive information about a phoneme (speech sound) in a specific language. The goal is to document all possible ways this phoneme can be written in the language's orthography.
+
+<input>
+You will receive input includes, `language` and `phoneme` (in IPA format).
+</input>
+
+<output>
+You will generate output in JSON format.
+
+<field name="graphemes">
+All possible graphemes (spellings) that can represent this phoneme in the language.
+
+<example>
+For phoneme /f/ in English, include graphemes like "f", "ph", "gh".
+For phoneme /ʃ/ in English, include graphemes like "sh", "ch", "chh".
+</example>
+
+<constraint>
+Be comprehensive: Include ALL possible spellings of the phoneme in the language.
+Be accurate: Ensure the graphemes correctly represent the phoneme in the language.
+Be thorough: Consider spellings that occur in different word positions.
+Include rare/special cases: Note uncommon or loan-word spellings when relevant.
+Only include direct representations: Only include graphemes that directly represent the phoneme.
+</constraint>
+
+<avoid>
+Don't include explanations outside the JSON structure.
+</avoid>
+</field>
+</output>
+</task>

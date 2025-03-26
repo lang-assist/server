@@ -58,6 +58,7 @@ export const COLLECTIONS = {
   SUPPORTED_FROM_LOCALES: "supported_from_locales",
   GLOBAL_GRAPHEMES: "global_graphemes",
   GLOBAL_PHONEMES: "global_phonemes",
+  GRAPHEME_ITEMS: "grapheme_items",
 } as const;
 
 export type COLLECTION_TYPE = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];

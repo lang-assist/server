@@ -1,0 +1,131 @@
+<test_instructions type="STORY">
+The material type used for interactive storytelling with questions. This type combines telling a story with interactive test questions.
+
+<output>
+
+Only `parts` is required. `parts` is an array of story parts.
+
+<field name="parts.id">
+Unique identifier for the story part.
+<do>
+Unique in the story.    
+</do>
+<avoid>
+Don't duplicate id.
+</avoid>
+
+<example>
+part1, scene1, intro1
+</example>
+
+</field>
+
+<field name="parts.type">
+    Type of the story part. Can be 'AUDIO' for narration or character dialogue with voice, 'PICTURE' for visual scene description, 'QUESTION' for interactive question about the story.
+</field>
+
+<field name="parts.ssml">
+    SSML formatted text with voice and style specifications for 'AUDIO' type. Look `ssml_guidelines` for more information.
+</field>
+
+<field name="parts.character">
+User facing character name for 'AUDIO' type. It should be a name that is appropriate for the situation and personality in the scenario. For example, if you have determined a nationality for the speaker as required by the scenario, his name should also be from that nationality.
+
+<examples>
+$user, Nathan, Evelyn, Harper, طارق, ياسمين, 
+</examples>
+
+<do>
+- Use culturally appropriate names. 
+- Use a name for the character instead of a role in the profession or context. 
+- "Reporter" instead of "John", "Doctor" instead of "Alice", "Student" instead of "Bob". 
+- The most common names in the community should not be used. Different names should also be used.
+- Use "$narrator" for narrator. Must be starts with "$".
+</do>
+
+<avoid>
+- General tags should not be used (e.g: 'Character A').
+- Don't use names that are not culturally appropriate.
+- Don't use very common names.
+</avoid> 
+
+</field>
+
+<field name="parts.picturePrompt">
+    Visual scene description for image generation for 'PICTURE' type. Look `picture_prompt_guidelines` for more information.
+</field>
+
+<field name="parts.question">
+Same structure as QUIZ questions. Look `question_structure` for more information.
+
+Must reference previous story parts
+
+Should test comprehension of the story so far.
+
+</field>
+
+</output>
+
+<story_guidelines>
+
+Story progresses through small, single-sentence audio parts. Each audip part is presented and played individually. While an audio part is playing, the closest picture part before that part is displayed. Story pauses at questions, continues after answer. 
+
+Age and level appropriate content. Cultural sensitivity. Clear narrative progression. Engaging and educational. Each audio part should be a single, clear sentence. Progressive build-up of story elements.
+
+Test comprehension of previous parts. Build on story context. Encourage critical thinking. Support language learning goals. Strategically placed throughout the story
+
+<do>
+- Visual elements support the story at key moments. 
+- First part should have a picture because when audio is playing, picture is displayed. E.g. If 1. part is picture, 2.,3.,4. parts are audio. Picture part(1) should be displayed while audio(2,3,4) is playing.
+- Minimum 15-20 sentences in total story. Minimum 5 questions, average 7-8 questions. Clear connection between consecutive parts. Completion time should be at least 2-4 minutes.
+- Strategically place questions throughout the story. Ensure they test comprehension of previous parts. 
+- Build on story context. Encourage critical thinking. Support language learning goals.
+- Have the characters speak in the audio parts.
+- Use narration very rarely. E.g. describe the scene, describe third party actions. 
+- Use voice names consistently. Each character has ONE consistent voice and different voices for different characters. 
+</do>
+
+<avoid>
+- Story should not be too short or too long.
+- There should not be more than 2-3 audio parts between two questions. Our main goal is not to tell stories, but to develop/measure the user's skills.
+- Don't narrate the dialogue, let the characters speak.
+- Don't use narration for dialogue.
+- Don't change the voice of the same character in the story.
+</avoid>
+
+<example>
+pic: A young woman with a beach bag and sunhat standing by her front door, looking excited. She's wearing a colorful summer dress and sandals.
+aud (voice 0 (narrator)): In saturday morning, it is sunny and warm. 
+aud (voice 1): I can't wait to get to the beach! I've been waiting for this weekend forever!
+aud (voice 2): Come on, sis! The waves aren't going to wait for us!
+aud (voice 1): Just making sure I've got everything. Sunscreen, towels, snacks...
+question: What items did Sarah mention she was bringing?
+aud (voice 1): The beach is calling! Let's go!
+pic: A blue car parked in a driveway with a young man in swimming shorts and a t-shirt leaning out of the driver's window, gesturing excitedly. His sister (the woman from the previous scene) is approaching with her beach bag.
+aud (voice 1): Coming, coming! Oh, look at that beautiful sky!
+aud (voice 2): Perfect beach weather, right? Not a cloud in sight!
+pic: A scenic coastal road with the ocean visible on one side. View from inside a car, showing both siblings - the brother driving and sister looking out at the view excitedly.
+aud (voice 1): Look at those waves! They're huge!
+aud (voice 2): Perfect for surfing! Did you bring your board?
+question: What did Tom want to do at the beach?
+...continue...
+</example>
+
+</story_guidelines>
+
+<voice_guidelines>
+
+There are 2 possible reasons to generate a AUDIO part:
+
+1. Character dialogue: First person, direct speech. 
+2. Narration: Third person, description of the scene.
+
+<do>
+Generally, use character voices for dialogue.
+</do>
+
+<do>
+Use narrator for narration.
+</do>
+
+</test_instructions>

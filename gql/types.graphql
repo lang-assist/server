@@ -379,9 +379,10 @@ type MaterialCreation {
 
 enum StagePartType {
   DOCUMENTATION
-  TASK
+  TEST
   WORDS
   SENTENCES
+  GRAPHEMES
 }
 
 type StageDocumentationPart {
@@ -410,6 +411,13 @@ type StageSentence {
   use_cases: [ID!]
 }
 
+type StageGrapheme {
+  grapheme: String!
+  ref_ID: ID
+  practices: [ID!]
+  use_cases: [ID!]
+}
+
 type StagePart implements Node {
   id: ID!
   type: StagePartType!
@@ -419,6 +427,7 @@ type StagePart implements Node {
   documentation: StageDocumentationPart
   words: [StageWord!]
   sentences: [StageSentence!]
+  graphemes: [StageGrapheme!]
 }
 
 type StagePartConnection implements Connection {
@@ -570,6 +579,7 @@ type StoryPart {
   pictureId: ID
   audioId: ID
   ssml: String
+  character: String
 }
 
 # Hikaye detayları

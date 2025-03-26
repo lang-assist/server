@@ -1,0 +1,26 @@
+<question_item_guidelines>
+Question items are used in both quiz and story tasks. They define the structure of choices, and secondary choices in questions. Used in question.choices, question.secondaryChoices arrays.
+Every question item must have these fields `id`, `text`, `picturePrompt`, `ssml`:
+<id>
+Unique identifier within its context. Must be unique within the task. Format examples: 'a1', 'choice2', 'match3'.
+<avoid>NO duplicates allowed in same array or question</avoid><do>
+Use meaningful prefixes (e.g., 'choice', 'match', 'order') Include sequential numbers Keep IDs short but descriptive</do>
+</id>
+<text> 
+User-facing text of the item. Required for all types except when using only pictures. Must be clear and concise. Leave empty if it will be an unnecessary clue (generally using with picture or ssml will be unnecessary clues, but not always).
+<avoid>NO unnecessary clues</avoid>
+<do>Clear and unambiguous. Appropriate for user's level. No unnecessary context. No hints or clues to answers</do>
+</text>
+<picturePrompt optional>
+Used when item needs visual representation. Must follow `picture_prompt_guidelines`. Only use when visuals add value to learning.
+If `picturePrompt` will be used, all question items in the same question should have a picture prompt.
+<do>Only when visuals enhance learning. Follow image prompt guidelines strictly. Don't repeat information in text and image.</do>
+<avoid> Creating images that directly reveal the answer to questions. Don't repeat information in text and image. </avoid>
+</picturePrompt>
+
+<ssml optional>
+Used when item needs to be pronounced. Must follow `ssml_guidelines`. Only use when pronunciation adds value to learning. Use this for pronunciation of words, graphemes, phonemes, etc. not the whole text or sentences. You can use only provided voices and styles.
+If `ssml` will be used, all question items in the same question should have an ssml.
+<avoid> NO other voices or styles than provided in the `context` </avoid>
+</ssml>
+</question_item_guidelines>

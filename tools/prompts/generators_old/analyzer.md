@@ -46,12 +46,6 @@ These observations are not user-facing. They are stored as string arrays. Update
 }
 ```
 
-1. Length and Format: 20-100 characters per entry, Maximum 100 entries per array, Focus on patterns, Clear evidence required.
-
-2. Content Focus: Language learning patterns, Skill level indicators, Learning preferences, Professional context when relevant.
-
-3. Exclude: Personal preferences, Individual vocabulary gaps, One-time mistakes, Subjective assessments.
-
 ### Level Updates
 
 Update skill levels when sufficient evidence exists:

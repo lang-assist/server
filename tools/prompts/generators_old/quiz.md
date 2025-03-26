@@ -15,7 +15,7 @@ Each prelude must have:
 
 `parts`: Array of content parts
 
-Each part must have:
+Each part "../generators"must have:
 
 - `type`: 'TEXT' | 'PICTURE' | 'AUDIO'
 - `content`: Content based on type

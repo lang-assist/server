@@ -13,7 +13,7 @@ import {
 } from "../models/_index";
 import { IMaterial } from "../models/_index";
 import { BrocaTypes } from "../types";
-import { msg } from "../utils/prompter";
+import { msg, withTag } from "../utils/prompter";
 import { BaseMaterialTypeHelper } from "./gen/materials/type-helpers";
 import { LanguageHelper } from "./language";
 import { LocaleHelper } from "./locale";
@@ -123,7 +123,7 @@ export function summarizeStageFocus(stage: WithId<IStage>) {
   message.addKv("Areas", stage.focusAreas?.join(", ") ?? "Unknown");
   message.addKv("Topics", stage.includedTopics?.join(", ") ?? "Unknown");
 
-  return message;
+  return withTag(message, "stage_focus");
 }
 
 export async function previousBehaviors(stage: WithId<IStage>) {
@@ -149,44 +149,45 @@ export async function previousBehaviors(stage: WithId<IStage>) {
 export function progressSummary(journey: WithId<IJourney>) {
   const message = msg();
 
-  message.addKv("Progress", (progressMsg) => {
-    const levels = journey.progress.level;
-    const levelsMsg = msg();
-    for (const [key, value] of Object.entries(levels)) {
-      if (value < 0) {
-        levelsMsg.addKv(key, "Unknown");
-      } else {
-        levelsMsg.addKv(key, `${value}%`);
-      }
+  const levels = journey.progress.level;
+  const levelsMsg = msg();
+  for (const [key, value] of Object.entries(levels)) {
+    if (value < 0) {
+      levelsMsg.addKv(key, "Unknown");
+    } else {
+      levelsMsg.addKv(key, `${value}%`);
     }
-    progressMsg.addKv("Levels", levelsMsg);
+  }
 
-    progressMsg.addKv("Observations", (observationsMsg) => {
-      observationsMsg.addKv("General", (general) => {
-        const generalObservations = journey.progress.general ?? [];
-        for (let i = 0; i < generalObservations.length; i++) {
-          const observation = generalObservations[i];
-          general.add(msg().addKv(`Index ${i}`, observation));
-        }
-      });
+  message.add(withTag(levelsMsg, "level"));
 
-      observationsMsg.addKv("Weak Points", (weaknesses) => {
-        const weakPoints = journey.progress.weakPoints ?? [];
-        for (let i = 0; i < weakPoints.length; i++) {
-          const weakPoint = weakPoints[i];
-          weaknesses.add(msg().addKv(`Index ${i}`, weakPoint));
-        }
-      });
+  const observationsMsg = msg();
 
-      observationsMsg.addKv("Strong Points", (strengths) => {
-        const strongPoints = journey.progress.strongPoints ?? [];
-        for (let i = 0; i < strongPoints.length; i++) {
-          const strongPoint = strongPoints[i];
-          strengths.add(msg().addKv(`Index ${i}`, strongPoint));
-        }
-      });
-    });
+  observationsMsg.addKv("General", (general) => {
+    const generalObservations = journey.progress.general ?? [];
+    for (let i = 0; i < generalObservations.length; i++) {
+      const observation = generalObservations[i];
+      general.add(msg().addKv(`Index ${i}`, observation));
+    }
   });
+
+  observationsMsg.addKv("Weak Points", (weaknesses) => {
+    const weakPoints = journey.progress.weakPoints ?? [];
+    for (let i = 0; i < weakPoints.length; i++) {
+      const weakPoint = weakPoints[i];
+      weaknesses.add(msg().addKv(`Index ${i}`, weakPoint));
+    }
+  });
+
+  observationsMsg.addKv("Strong Points", (strengths) => {
+    const strongPoints = journey.progress.strongPoints ?? [];
+    for (let i = 0; i < strongPoints.length; i++) {
+      const strongPoint = strongPoints[i];
+      strengths.add(msg().addKv(`Index ${i}`, strongPoint));
+    }
+  });
+
+  message.add(withTag(observationsMsg, "observations"));
 
   return message;
 }
@@ -209,14 +210,21 @@ export async function lastStagesSummaries(journey: WithId<IJourney>) {
   );
 
   const count = lastStages.length;
-  message.addKv(`Last ${count} stages focus`, (materialsMsg) => {
+
+  if (count > 0) {
     for (let i = 0; i < count; i++) {
-      materialsMsg.addKv(
-        `${i + 1}. ${lastStages[i].name}`,
-        summarizeStageFocus(lastStages[i])
+      message.add(
+        withTag(summarizeStageFocus(lastStages[i]), "stage", {
+          last: (i + 1).toString(),
+          name: lastStages[i].name,
+        })
       );
     }
-  });
+    message.add(withTag(message, "previous_stages"));
+  } else {
+    message.add(withTag(msg("No previous stages"), "previous_stages"));
+  }
+
   return message;
 }
 
@@ -229,9 +237,9 @@ export async function journeySummary(
   const toName = LanguageHelper.getEnglishName(journey.to);
   const fromName = LocaleHelper.getEnglishName(journey.from);
 
-  journeySummary.add(
-    `The user ${user.name} is learning ${toName}. User's main language is ${fromName}. All user facing texts MUST be in ${toName}.`
-  );
+  journeySummary.add(withTag(fromName, "main-language"));
+  journeySummary.add(withTag(toName, "target-language"));
+  journeySummary.add(withTag(`Name: ${user.name}`, "user"));
 
   return journeySummary;
 }

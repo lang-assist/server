@@ -378,20 +378,15 @@ export class GlobalDocumentationManager {
             break;
           case "picture":
             if (
-              explanation.picturePrompt &&
+              explanation.content &&
               (explanation.pictureId === undefined ||
                 explanation.pictureId === null)
             ) {
               const id = new ObjectId();
-              const gen = new ImageGeneration(
-                explanation.picturePrompt,
-                id,
-                ctx,
-                {
-                  reason: "explanation",
-                  produced: id,
-                }
-              );
+              const gen = new ImageGeneration(explanation.content, id, ctx, {
+                reason: "explanation",
+                produced: id,
+              });
 
               promises.push(gen.generate());
 
@@ -399,13 +394,13 @@ export class GlobalDocumentationManager {
             }
           case "audio":
             if (
-              explanation.ssml &&
+              explanation.content &&
               (explanation.audioId === undefined ||
                 explanation.audioId === null)
             ) {
               const id = new ObjectId();
               const gen = new SpeechGeneration(
-                explanation.ssml,
+                explanation.content,
                 id,
                 ctx.language,
                 ctx,

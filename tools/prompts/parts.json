@@ -1,27 +1,24 @@
 {
   "files": {
-    "role": "shared/role.md",
-    "ssml": "shared/ssml.md",
-    "question": "shared/question.md",
-    "question_item": "shared/question_item.md",
-    "picture_prompt": "shared/picture_prompt.md",
-    "base_generator": "shared/base_generator.md",
-    "difficulty": "shared/difficulty.md",
-    "quiz": "generators/quiz.md",
-    "conversation": "generators/conversation.md",
-    "conversation_turn": "generators/conversation_turn.md",
-    "story": "generators/story.md",
-    "feedback": "generators/feedback.md",
-    "analyzer": "generators/analyzer.md",
-    "documentation": "generators/documentation.md",
-    "dictionary": "generators/dictionary.md",
-    "linguistic_units": "generators/linguistic_units.md",
-    "dict": "shared/dict.md",
-    "doc": "shared/doc.md",
-    "stager": "generators/stager.md",
-    "html": "shared/html.md",
-    "global_grapheme": "generators/global-grapheme.md",
-    "global_phoneme": "generators/global-phoneme.md"
+    "role": "shared/role.html",
+    "ssml": "shared/ssml.html",
+    "question": "shared/question.html",
+    "question_item": "shared/question_item.html",
+    "picture_prompt": "shared/picture_prompt.html",
+    "base_generator": "shared/base_generator.html",
+    "difficulty": "shared/difficulty.html",
+    "quiz": "generators/quiz.html",
+    "conversation": "generators/conversation.html",
+    "conversation_turn": "generators/conversation_turn.html",
+    "story": "generators/story.html",
+    "feedback": "generators/feedback.html",
+    "analyzer": "generators/analyzer.html",
+    "documentation": "generators/documentation.html",
+    "linguistic_units": "generators/linguistic_units.html",
+    "stager": "generators/stager.html",
+    "html": "shared/html.html",
+    "global_grapheme": "generators/global-grapheme.html",
+    "global_phoneme": "generators/global-phoneme.html"
   },
   "instructions": {
     "quiz": {
@@ -60,7 +57,7 @@
     },
     "feedback": {
       "role": "FEEDBACK GENERATOR",
-      "parts": ["feedback", "dict", "doc"]
+      "parts": ["feedback"]
     },
     "analyzer": {
       "role": "PROGRESS ANALYZER",
@@ -70,25 +67,9 @@
       "role": "DOCUMENTATION GENERATOR",
       "parts": ["documentation", "picture_prompt", "ssml"]
     },
-    "dictionary": {
-      "role": "DICTIONARY GENERATOR",
-      "parts": ["dictionary", "picture_prompt", "ssml"]
-    },
-    "linguistic_units": {
-      "role": "LINGUISTIC UNITS GENERATOR",
-      "parts": ["linguistic_units", "dict", "doc"]
-    },
     "stager": {
       "role": "STAGE GENERATOR",
       "parts": ["stager", "picture_prompt", "difficulty"]
-    },
-    "global_grapheme": {
-      "role": "GLOBAL GRAPHEME GENERATOR",
-      "parts": ["global_grapheme"]
-    },
-    "global_phoneme": {
-      "role": "GLOBAL PHONEME GENERATOR",
-      "parts": ["global_phoneme"]
     }
   }
 }

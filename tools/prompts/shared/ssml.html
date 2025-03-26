@@ -1,0 +1,64 @@
+<ssml_guidelines>
+
+<main>
+We use microsoft azure as TTS service. Azure has some rules:
+
+the root element `<speak>` and xml:lang attr and xml namespaces are CANNOT be included in your ssml content. Your ssml content will be wrapped with <speak> tag and attributes and namespaces will be added after your generation.
+
+SO, YOU SHOULD ADD SSML LIKE:
+
+```xml
+<voice name="<voice name>">
+    This is the text that is spoken.
+</voice>
+```
+</main>
+
+<ssml_tags>
+Voice: Voice name is the name of the voice in the azure tts service.
+
+All voice names (`supported_voices`) and the voice's styles (`styles`) will be provided to you in `context`, except for the ones that are not allowed to be used. The following examples are only for reference.
+
+<example>
+"<voice name="en-US-AvaNeural">
+    This is the text that is spoken.
+</voice>"
+</example>
+
+Break:
+Usage: `<break time="1s"/>`
+Attributes:
+- time: "750ms" (default) or "1s" or "1500ms"
+- strength: "x-weak", "weak", "medium" (default), "strong", "x-strong"
+
+Silence:
+Usage: `<mstts:silence type="Sentenceboundary" value="200ms"/>`
+Attributes:
+
+- type: "Leading" (natural), "Leading-exact" (with exact time from the value attribute), "Trailing" (natural), "Trailing-exact" (with exact time from the value attribute), "Sentenceboundary" (natural), "Sentenceboundary-exact" (with exact time from the value attribute), "Comma-exact" (with exact time from the value attribute), "Semicolon-exact" (with exact time from the value attribute), "Enumerationcomma-exact" (with exact time from the value attribute)
+- value: "200ms" (default) or "1s" or "1500ms"
+
+Paragraph:
+Usage: `<p>` for paragraph separation.
+
+Sentence:
+Usage: `<s>` for sentence separation.
+
+Express-as:
+Usage: `<mstts:express-as style="sad" styledegree="2">`
+Attributes:
+
+- style: e.g "sad", "happy". Available styles for each voice will be provided to you.
+- styledegree: 0-2 (default 1)
+
+Phoneme:
+Use phoneme tag to pronounce the text. Always use ipa alphabet. Only use when a phoneme or grapheme needs to be pronounced. Always use ipa alphabet.
+
+Usage: `<phoneme alphabet="ipa" ph="k"> c </phoneme>`
+
+<example>
+        "<phoneme alphabet="ipa" ph="ʃ"> sh </phoneme>"
+        "<phoneme alphabet="ipa" ph="ˈkæt"> cat </phoneme>"
+</example>
+</ssml_tags>
+</ssml_guidelines>

@@ -1,0 +1,22 @@
+<dictionary_referencing>
+Some other AI agents creates definitions, translations or phoneme sets for referenced words. For pointing to the correct dictionary entry, you need to specify the things that distinguish the word from its homograms, domain, number, pos, tense, etc. Other AI agents looks for existing entries by using the search term with a vector database.
+
+<field name="word">
+A base text entry of the dictionary. E.g. a word, a phrase.
+</field>
+
+<field name="search_term" optional>
+<rules>
+- Search term should be in the language of the word.
+- Must be short and concise. Is not user facing. Add important keywords separated by commas.
+- Add domain, number, pos, tense, etc. only when it's not obvious from the word.
+- Don't duplicate words in the search term.
+- Leave empty if the word is enough to find the correct entry. No need distinctive keywords.
+</rules>
+
+<examples>
+For "bank" -> "noun, financial" or "noun, river"
+For علم -> (in arabic) "noun, knowledge, singular" or "verb, thougt a male, past"
+</examples>
+</field>
+</dictionary_referencing>

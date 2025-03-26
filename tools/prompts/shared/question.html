@@ -1,0 +1,176 @@
+<question_structure>
+
+`id`: The id of the question. MUST be unique in the task. DONT duplicate id. It will be used to identify the question in the answer. Can be 'q1', 'text1', 'q2', 'text2' etc.
+
+`type`: Question type. All supported question types are listed in `question_types`.
+
+`question`: Question text. Question text can be formatted with supported HTMLtags. (`html_text_guidelines`). There is no need to use too much styling in questions. Only use when necessary (e.g. for phonemes, some emphasis, etc. Not tables, lists, etc.).
+
+`preludeID`: In QUIZ tasks, questions can also refer to a prelude. `preludeID` must be the `id` of an object in the `preludes` array. (`prelude_guidelines`)
+
+`choices`: field is required or optional depending on the question type. (`question_item_guidelines` , `question_visualization`)
+
+`secondaryChoices`: field is required or optional depending on the question type. (`question_item_guidelines` , `question_visualization`)
+
+
+
+<question_types>
+<question_type name="TEXT_WRITE">
+The user can freely answer the question. Can be used to ask the user to write an essay, a sentence, a paragraph, etc.
+</question_type>
+<question_type name="FILL_BLANK">
+Questions that allow the user to fill in the blanks either by writing freely or selecting from options.
+
+To indicate the blank, use expressions like `{blank1}`, `{blank2}`, `{blank3}` etc.
+
+The `question` field must contain the sentence/phrase that needs to be filled in the sentence/phrase.
+
+`choices` field is optional. If provided, the user can select from options for `blank1`.
+
+`secondaryChoices` field is optional. If provided, the user can select from options for `blank2`.
+
+If `choices` or `secondaryChoices` are not provided for a blank, the user can write their answer freely with typing.
+
+<avoid>
+"Fill in the blank" or similar expressions SHOULD NOT be used in the `question` field. This expression is added by the interface if the question type is known.
+</avoid>
+
+
+
+</question_type>
+   
+<question_type name="CHOICE">
+Used for questions with a single or multiple correct answers from a list of options.
+
+`choices` field is required.
+
+If any question item has a picture, all the items in the other list should also have pictures.
+
+`multiple`: If `multiple` is true, the user can select multiple answers. If `multiple` is false, the user can only select one answer.
+</question_type>
+
+<question_type name="MATCHING">
+Used for questions that require matching between two lists.
+
+`choices` and `secondaryChoices` fields are required. There must be clear relationships between the two lists to be matched.
+
+If any question item has a picture, all the items in the other list should also have pictures.
+</question_type>
+
+<question_type name="ORDERING">
+Used for questions that require ordering.
+
+`choices` field is required.
+
+In ordering questions, pictures are not allowed in the choices.
+
+The list content should not be added to the `question` field. `question` should only be a question. `question` field can be an empty string. If it is an empty string, an expression like "Order the elements in the list" will be added by the interface.
+
+</question_type>
+
+<question_type name="TRUE_FALSE">
+The user can answer correctly/incorrectly.
+
+`question` field is required.
+
+<avoid>
+"Is it correct?" and "Is it incorrect?" expressions should not be used. These expressions are added by the interface.
+</avoid>
+
+</question_type>
+
+<question_type name="RECORD">
+Used for questions that require the user to answer with their voice.
+
+The "Answer with voice" expression should not be used in the question. This expression is added by the interface.
+
+`referenceText` field is optional. If provided, the user can see the reference text before recording. In the pronunciation assessment after the user record, if the reference text is known, we will get more accurate results. So when measuring pronunciation, it is better to provide the reference text. You can also give reference text in a way that it is clear in advance what to fill the blank with. In this case, give the blank an ID with the expression that needs to be filled.
+
+<example>
+   Pre-Information: "An image of a woman eating a pizza"
+   Question: "What is the woman doing?"
+   Reference Text: "She is {eating} a pizza"
+
+   In this case, the user can see the reference text before recording: "She is .... a pizza." and we expect the user record the sentence "She is eating a pizza". Complated sentence is used for pronunciation assessment.
+</example>
+
+
+</question_type>
+
+<question_visualization>
+
+Visual materials are VERY IMPORTANT for learning process. They should be used everywhere possible
+
+Usage Areas: Preludes (in QUIZ tasks), Choices
+
+Used in: Concrete objects, Actions, Emotions, Places, Professions, Weather, Time concepts, Basic activities
+
+Not used in: Language rules, Abstract concepts, Complex times, Structural elements
+
+<rules>
+- Question Item's images will be shown in a small size, they should not contain difficult details to understand.
+- Picture prompts should always be in English. Prompts are not shown to the user. Only the images created with prompts are shown to the user.
+</rules>
+
+<avoid>
+creating images that directly reveal the answer to questions.
+</avoid>
+</question_visualization>
+
+<hint_management>
+Before generating a question: Consider the user's level, Decide what to develop, decide what level of task to create.
+
+After making the decision, when generating the task: Always consider what the user will see. Users can see some pre-information before the questions. In QUIZ tasks, users see the preludes if any with the questions. In STORY tasks, users see the images and can listen to the audio if any before the questions.
+
+<never>
+NEVER use the exact same wording in both prelude and question. This allows users to answer without language comprehension.
+<bad>
+   Prelude: "John wakes up at 7:00" → Question: "When does John wake up?"
+</bad>
+<good>
+   Prelude: "John starts his day at 7:00" → Question: "What time does John get out of bed?"
+</good>
+
+</never>
+
+<never>
+NEVER include direct visual answers in pictures that match text choices.
+<bad>
+   Picture shows a clock at 7:00 → Question asks about time with 7:00 as an option
+</bad>
+<good>
+   Picture shows morning activities without visible clock → Question asks about time
+</good>
+</never>
+
+<always>
+ALWAYS use different vocabulary and phrasing between prelude and questions.
+<bad>
+   Prelude: "Mary likes apples" → Question: "What does Mary like?"
+</bad>
+<good>
+   Prelude: "Mary enjoys eating fruit, especially red ones" → Question: "What is Mary's favorite fruit?"
+</good>
+</always>
+
+<always>
+ALWAYS ensure questions require actual language comprehension to answer correctly.
+<bad>
+   Questions that can be answered by pattern matching or visual cues alone
+</bad>
+<good>
+   Questions that require understanding meaning, context, or inference
+</good>
+</always>
+
+<do>
+- Provide clues to make the question appropriate for the material difficulty level.
+- Use images in pre-informations and questions to use visual memory: E.g. Enrich the pre-information with images to make it easier to understand and remember.
+- Use images without direct answer clues: E.g. an image shows a cat, the user should be asked what animal is in the picture, only with text choices.
+- Always use different vocabulary and phrasing between prelude text and questions.
+- Ensure questions require actual language comprehension to answer correctly.
+</do>
+
+</hint_management>
+
+</question_structure>

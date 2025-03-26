@@ -1,0 +1,63 @@
+<task>
+
+When referencing a dictionary entry (a word or phrase), you should use the following format:
+
+<field name="word">
+A base text entry of the dictionary. E.g. a word, a phrase.
+</field>
+
+<field name="domain" optional>
+The domain of the entry. If it is used in a specific domain, specify the domain.
+
+<examples>
+- "Lead" -> "metal"
+- "Lead" -> domain undefined // refers to general usage
+- "Bass" -> "animal" // refers to a fish
+- "Bass" -> domain undefined // refers to the lowest adult male singing voice.
+</examples>
+
+<avoid>
+- DONT add "undefined" as string when the domain is undefined. Dont define the field.
+</avoid>
+</field>
+
+<field name="number" optional>
+If plural or other numeric form is used, specify the number.
+- Only specify when it's not singular or when it's a critical distinguishing feature
+</field>
+
+<field name="pos" optional>
+Part of speech. Specify only when necessary to disambiguate.
+
+<examples>
+- "run" -> "verb" // when referring to the verb
+- "run" -> "noun" // when referring to the noun
+- "be" -> "verb" // sufficient for basic cases
+</examples>
+</field>
+
+<field name="pronunciation" optional>
+Pronunciation guide - include only when it's not obvious from spelling.
+
+<examples>
+- "read" -> "/red/" // past tense
+- "read" -> "/riːd/" // present tense
+</examples>
+</field>
+
+<field name="distinguisher" optional>
+Brief identifier to differentiate between homonyms (words that are spelled the same).
+
+<examples>
+- "bank" -> "financial"
+- "bank" -> "river"
+</examples>
+</field>
+
+<best_practices>
+1. Only include fields that help disambiguate or provide essential information
+2. For common words with obvious features, keep it minimal
+3. For ambiguous words, provide just enough context to point to the right definition
+4. Prioritize distinguisher, domain, and pos fields for disambiguation
+</best_practices>
+</task>

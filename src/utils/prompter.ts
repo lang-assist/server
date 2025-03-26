@@ -457,6 +457,25 @@ export class PromptBuilder {
   }
 }
 
+export function withTag(
+  msg: MessageBuilder | string,
+  tag: string,
+  attr?: { [key: string]: string }
+) {
+  const str = msg instanceof MessageBuilder ? msg.build() : msg;
+  return `
+<${tag}${
+    attr && Object.keys(attr).length > 0
+      ? ` ${Object.entries(attr)
+          .map(([k, v]) => `${k}="${v}"`)
+          .join(" ")}`
+      : ""
+  }>
+${str}
+</${tag}>
+`;
+}
+
 export function msg(
   initial: string | MessageBuilder | undefined = undefined,
   args: {

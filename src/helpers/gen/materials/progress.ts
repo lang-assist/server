@@ -51,6 +51,7 @@ import { AIModel } from "../../../types/ctx";
 import { AIModels } from "../../../utils/constants";
 import { LanguageHelper } from "../../language";
 import { StorageService } from "../../storage";
+import { GraphemeHelper } from "../../grapheme";
 
 export class ProgressHelper {
   private static analyzingMaterials: {
@@ -617,7 +618,7 @@ export class ProgressHelper {
     flow: MaterialFlowContext
   ) {
     switch (part.type) {
-      case "TASK":
+      case "TEST":
         const mat = part.material.material_ID;
         if (!mat) {
           throw new Error("Material not found");
@@ -925,8 +926,8 @@ export class ProgressHelper {
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       switch (part.type) {
-        case "TASK":
-          const taskPart = part as BrocaTypes.Progress.StageTaskPart;
+        case "TEST":
+          const taskPart = part as BrocaTypes.Progress.StageTestPart;
 
           const partId = new ObjectId();
 
@@ -943,7 +944,7 @@ export class ProgressHelper {
           const p = await StagePart.insertOne(
             {
               stage_ID: ctx.flow.stage._id,
-              type: "TASK",
+              type: "TEST",
 
               explanation: taskPart.explanation,
 
@@ -1040,7 +1041,7 @@ export class ProgressHelper {
 
           break;
 
-        case "SENTENCE":
+        case "SENTENCES":
           const sentencePart = part as BrocaTypes.Progress.StageSentencePart;
 
           const sentenceP = await StagePart.insertOne({
@@ -1081,6 +1082,43 @@ export class ProgressHelper {
               sentences: newSentences,
             },
           });
+
+          break;
+        case "GRAPHEMES":
+          const graphemePart = part as BrocaTypes.Progress.StageGraphemePart;
+
+          const grps: {
+            grapheme: string;
+            ref_ID?: ObjectId;
+            practices?: string[]; // ObjectIds of Materials
+            use_cases?: string[]; // ObjectIds of UserDocs
+          }[] = [];
+
+          for (let i = 0; i < graphemePart.content.graphemes.length; i++) {
+            const grapheme = graphemePart.content.graphemes[i];
+
+            const grp = await GraphemeHelper.getGrapheme(
+              grapheme,
+              ctx.flow.journey.to
+            );
+
+            grps.push({
+              grapheme: grp.grapheme,
+              ref_ID: grp._id,
+            });
+          }
+
+          const graphemeP = await StagePart.insertOne({
+            stage_ID: ctx.flow.stage._id,
+            type: "GRAPHEMES",
+            explanation: graphemePart.explanation,
+            hidden: i !== 0,
+            graphemes: grps,
+          });
+
+          if (!graphemeP) {
+            throw new Error("Stage part not created");
+          }
 
           break;
       }

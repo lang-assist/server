@@ -9,6 +9,4 @@ We highly recommend to add:
 - ~10 words in ~2 WORDS parts.
 - (If user needs it) ~2-5 phoneme and ~2-5 grapheme parts.
 
-All user-facing texts should be in the target language.
-
-As an exception, you can use the source language for if user cannot read the target language (e.g. they want to learn arabic, but they can't arabic script).
+All user-facing texts should be in the `target-language`. As an exception, you can use the `main-language` for if user cannot read the `target-language` (e.g. they want to learn arabic, but they can't arabic script).

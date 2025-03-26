@@ -18,7 +18,7 @@ export class QuizMaterialTypeHelper extends BaseMaterialTypeHelper {
           prel.addKv(`Prelude "${prelude.id}"`, (sub) => {
             for (const part of prelude.parts) {
               if (part.type === "PICTURE") {
-                sub.addKv("Picture Prompt", part.picturePrompt!);
+                sub.addKv("Picture Prompt", part.content!);
               } else if (part.type === "TEXT") {
                 sub.addKv("Text", part.content!);
               } else if (part.type === "AUDIO") {
@@ -78,8 +78,8 @@ export class QuizMaterialTypeHelper extends BaseMaterialTypeHelper {
       const newPreludes = preludes.map((p) => {
         if (p.parts.length > 0) {
           for (const part of p.parts) {
-            if (part.type === "PICTURE" && part.picturePrompt) {
-              const img = this.generateItemPicture(ctx, part.picturePrompt, {
+            if (part.type === "PICTURE" && part.content) {
+              const img = this.generateItemPicture(ctx, part.content, {
                 reason: "quizPreludePicture",
               });
               part.pictureId = img.id;

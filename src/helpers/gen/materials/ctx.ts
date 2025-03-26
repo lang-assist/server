@@ -13,7 +13,12 @@ import {
 import { WithId } from "mongodb";
 import { BrocaTypes } from "../../../types";
 import { AIError } from "../../../utils/ai-types";
-import { MessageBuilder, msg, PromptBuilder } from "../../../utils/prompter";
+import {
+  MessageBuilder,
+  msg,
+  PromptBuilder,
+  withTag,
+} from "../../../utils/prompter";
 import { ChatGenerationContextWithGlobalAssistant } from "../../ai/chat/base";
 import { AIModels } from "../../../utils/constants";
 import {
@@ -367,21 +372,17 @@ export class StageGeneratingContext extends MaterialBaseContext {
       cache: true,
     });
 
-    const req = msg();
+    let contextMsg = msg();
 
-    req.add(await journeySummary(this.flow.journey, this.flow.user));
+    contextMsg.add(await journeySummary(this.flow.journey, this.flow.user));
 
-    req.add(progressSummary(this.flow.journey));
+    contextMsg.add(progressSummary(this.flow.journey));
 
-    req.add(await lastStagesSummaries(this.flow.journey));
+    contextMsg.add(await lastStagesSummaries(this.flow.journey));
 
-    if (this.isInitial) {
-      req.add(additionalInstructions.initial_stage);
-    } else {
-      req.add(additionalInstructions.other_stage);
-    }
+    contextMsg.add(withTag(additionalInstructions.other_stage, "request"));
 
-    builder.userMessage(req);
+    builder.userMessage(contextMsg);
 
     return builder;
   }

@@ -21,19 +21,19 @@ An array of story parts. Each part "../new/generators"contains:
 Must reference previous story parts
 Should test comprehension of the story so far.
 
-Last part should be a question!
+Last part "../generators"should be a question!
 
 ### Story Guidelines
 
 Structure: Story progresses through small, single-sentence audio parts. Each narrative piece is presented and narrated individually. Story pauses at questions, continues after answer. Visual elements support the narrative at key moments. Minimum 15-20 sentences in total narrative. Minimum 5 questions, average 7-8 questions. Clear connection between consecutive parts. Completion time should be at least 4-5 minutes.
 
-Content: Age and level appropriate content. Cultural sensitivity. Clear narrative progression. Engaging and educational. Each audio part should be a single, clear sentence. Progressive build-up of story elements.
+Content: Age and level appropriate content. Cultural sensitivity. Clear narrative progression. Engaging and educational. Each audio part "../generators"should be a single, clear sentence. Progressive build-up of story elements.
 
 Questions: Test comprehension of previous parts. Build on story context. Encourage critical thinking. Support language learning goals. Strategically placed throughout the story
 
 ### Best Practices
 
-Flow: Break story into small, digestible audio pieces. Each audio part should be one complete sentence. Maintain logical progression. Create anticipation and engagement. Use pauses effectively with questions. Add pictures before the consecutive or long audio blocks if possible. The user can visualize the image better by seeing it while listening to the audio.
+Flow: Break story into small, digestible audio pieces. Each audio part "../generators"should be one complete sentence. Maintain logical progression. Create anticipation and engagement. Use pauses effectively with questions. Add pictures before the consecutive or long audio blocks if possible. The user can visualize the image better by seeing it while listening to the audio.
 
 Question Integration: Strategically place questions throughout the story. Ensure they test comprehension of previous parts. Build on story context. Encourage critical thinking. Support language learning goals.
 

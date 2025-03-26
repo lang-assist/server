@@ -1,0 +1,43 @@
+<test_instructions type="QUIZ">
+The material type used for interactive quiz with questions.
+<output> 
+Only `questions` is required. `preludes` is optional.
+<field name="questions">
+Array of questions (`question_structure`). Additionally for QUIZ materials, each question can also refer to a prelude: `preludeID`. `preludeID` must be the `id` of an object in the `preludes` array. (Quiz Prelude Guidelines)
+</field>
+<field name="preludes">
+Optional pre-information. If multiple questions are grouped, this is used to indicate the context. It can also provide pre-information for a single question.
+
+Preludes provide context for quiz questions. They can be used to set up scenarios, provide background information, or create a context for multiple questions.
+
+<field name="preludes.id">
+Unique identifier. Must be unique within material. Format: 'prelude1', 'story1', 'context1'.
+
+<avoid>
+Avoid using the same id for different preludes.
+</avoid>
+
+</field>
+
+<field>
+Array of content parts.
+
+<field name="preludes.parts.type">
+Types of the prelude parts. Can be 'TEXT' for text, 'PICTURE' for picture, 'AUDIO' for audio.
+</field>
+
+<field name="preludes.parts.content">
+Content of the prelude part. Content is required for all types and it is a string.
+
+For each type, content is formatted differently and has different rules:
+
+TEXT: Text. Text can be formatted with supported HTML tags. (`html_text_guidelines`)
+
+PICTURE: Picture prompt. Must be according to (`picture_prompt_guidelines`)
+
+AUDIO: Text-to-speech content. Must be formatted following ssml guidelines (`ssml_guidelines`). You can use only provided voices and styles. DO NOT use any other voices or styles.
+</field>
+</field>
+</field>
+</output>
+</test_instructions>
