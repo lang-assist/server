@@ -149,10 +149,11 @@ export async function initServices() {
     ),
     azure_o1: new AzureOpenAIModel(
       "azure_o1",
-      process.env.AZURE_AI_KEY!,
+      process.env.AZURE_AI_KEY_EU2!,
       prices.azure_o1,
-      "https://broca-oai418024195739.cognitiveservices.azure.com/",
-      "o1"
+      "https://mehme-m70160s9-eastus2.cognitiveservices.azure.com/",
+      "o1",
+      "2024-12-01-preview"
     ),
     azure_o1_mini: new AzureOpenAIModel(
       "azure_o1_mini",

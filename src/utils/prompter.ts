@@ -360,6 +360,7 @@ export class PromptBuilder {
 
     let assistantContextParts: string[] = [];
     let threadContextParts: string[] = [];
+    let noneContextParts: string[] = [];
 
     let cachedCount = 0;
 
@@ -369,6 +370,8 @@ export class PromptBuilder {
           assistantContextParts.push(message.content);
         } else if (message.instructionLevel === "thread") {
           threadContextParts.push(message.content);
+        } else if (message.instructionLevel === "none") {
+          noneContextParts.push(message.content);
         }
       }
     }
@@ -377,9 +380,6 @@ export class PromptBuilder {
       ctx.push({
         type: "text",
         text: assistantContextParts.join("\n"),
-        cache_control: {
-          type: "ephemeral",
-        },
       });
     }
 
@@ -387,12 +387,15 @@ export class PromptBuilder {
       ctx.push({
         type: "text",
         text: threadContextParts.join("\n"),
-        cache_control: {
-          type: "ephemeral",
-        },
       });
     }
 
+    if (noneContextParts.length > 0) {
+      ctx.push({
+        type: "text",
+        text: noneContextParts.join("\n"),
+      });
+    }
     for (const message of messages) {
       if (message.role === "system") {
         // if (addCache && systemCacheCount < 4 && message.cache) {

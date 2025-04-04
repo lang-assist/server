@@ -25,7 +25,8 @@ export class AzureOpenAIModel extends AIModel<ChatGeneration<any>> {
     public apiKey: string,
     price: BrocaTypes.AI.Types.AIPricing,
     public baseUrl: string,
-    public deployment: string
+    public deployment: string,
+    public apiVersion: string = "2024-08-01-preview"
   ) {
     super("chat", price);
     this.name = modelName;
@@ -41,7 +42,7 @@ export class AzureOpenAIModel extends AIModel<ChatGeneration<any>> {
         apiKey: this.apiKey,
         deployment: this.deployment,
         endpoint: this.baseUrl,
-        apiVersion: "2024-08-01-preview",
+        apiVersion: this.apiVersion,
       });
     }
     return this._client;

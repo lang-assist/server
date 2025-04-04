@@ -380,9 +380,9 @@ export class StageGeneratingContext extends MaterialBaseContext {
 
     contextMsg.add(await lastStagesSummaries(this.flow.journey));
 
-    contextMsg.add(withTag(additionalInstructions.other_stage, "request"));
+    builder.systemMessage(contextMsg, "none", 1);
 
-    builder.userMessage(contextMsg);
+    builder.userMessage(withTag(additionalInstructions.other_stage, "request"));
 
     return builder;
   }

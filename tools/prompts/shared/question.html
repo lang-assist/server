@@ -97,6 +97,8 @@ The "Answer with voice" expression should not be used in the question. This expr
 
 </question_type>
 
+</question_types>
+
 <question_visualization>
 
 Visual materials are VERY IMPORTANT for learning process. They should be used everywhere possible
@@ -122,16 +124,24 @@ Before generating a question: Consider the user's level, Decide what to develop,
 
 After making the decision, when generating the task: Always consider what the user will see. Users can see some pre-information before the questions. In QUIZ tasks, users see the preludes if any with the questions. In STORY tasks, users see the images and can listen to the audio if any before the questions.
 
-<never>
+<avoid>
 NEVER use the exact same wording in both prelude and question. This allows users to answer without language comprehension.
-<bad>
-   Prelude: "John wakes up at 7:00" → Question: "When does John wake up?"
-</bad>
+   <example>
+      Prelude: "John wakes up at 7:00" → Question: "When does John wake up?"
+   </example>
+</avoid>
+
+   <do>
+      Provide clues to make the question appropriate for the material difficulty level.
+      <example>
+
+      </example>
+
+   </do>
+
 <good>
    Prelude: "John starts his day at 7:00" → Question: "What time does John get out of bed?"
 </good>
-
-</never>
 
 <never>
 NEVER include direct visual answers in pictures that match text choices.

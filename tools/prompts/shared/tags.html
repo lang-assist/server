@@ -1,10 +1,65 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
-</head>
-<body>
-$END$
-</body>
-</html>
+
+<tags_guidelines>
+<overview>
+BrocaAgent prompt system uses XML-style tags to structure prompts. Each tag serves a specific purpose in guiding the AI's response generation.
+</overview>
+
+<root_tags>
+- <role>: Defines the AI assistant's role and primary responsibility
+- <task>: Contains task-specific instructions independent of context
+- <context>: Holds context-dependent information provided by the server
+- <request>: Contains the main request details from the server
+- <jsonl>: Defines the structure and rules for streaming JSON Lines output
+</root_tags>
+
+<jsonl_guidelines>
+<purpose>
+The JSONL tag defines how to structure streaming responses. Each line should be a complete, valid JSON object that can be processed independently.
+</purpose>
+
+<structure>
+Each JSON line must include:
+- `type`: Identifies the type of content (e.g., "stage_part", "documentation", "feedback")
+- `action`: The operation to perform ("create", "update", "delete")
+- `payload`: The actual content following the defined schema
+
+<example>
+{"type": "stage_part", "action": "create", "payload": {"id": "p1", "content": "Hello", "part_type": "text"}}
+{"type": "documentation", "action": "create", "payload": {"title": "Greeting", "content": "Basic greeting in English"}}
+</example>
+</structure>
+
+<rules>
+- Each line must be a complete, valid JSON object
+- No line should depend on previous or future lines
+- Include all necessary context within each line
+- Use consistent type identifiers across related lines
+- Follow the defined schema for each type
+- Escape special characters properly
+</rules>
+
+<validation>
+- No trailing commas
+- No multi-line objects
+- UTF-8 encoding
+- No comments
+- Each line must end with a newline character
+</validation>
+</jsonl_guidelines>
+
+<usage>
+<do>
+- Use appropriate tags for structuring content
+- Follow tag hierarchy
+- Include all required attributes
+- Maintain consistent formatting
+</do>
+
+<avoid>
+- Mixing tag responsibilities
+- Skipping required tags
+- Using undefined tags
+- Nesting tags incorrectly
+</avoid>
+</usage>
+</tags_guidelines>
