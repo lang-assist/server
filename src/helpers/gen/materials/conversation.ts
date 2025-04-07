@@ -216,7 +216,7 @@ class ConversationFlow {
     const created = await ConversationTurn.insertOne({
       material_ID: this.material._id,
       character: turn.turn.character,
-      text: turn.turn.text,
+
       ssml: turn.turn.ssml,
       audio_ID: turn.audioId,
       nextTurn: turn.nextTurn,
@@ -589,42 +589,42 @@ export class ConversationManager {
     // TODO: Add characters instructions
     const gen = new ChatGeneration("conversationTurn", builder, turnCtx);
 
-    const res = await gen.generate();
+    // const res = await gen.generate();
 
-    const turn = undefinedOrValue(res.turn, null);
+    // const turn = undefinedOrValue(res.turn, null);
 
-    const nextTurn = undefinedOrValue(res.nextTurn, null);
+    // const nextTurn = undefinedOrValue(res.nextTurn, null);
 
-    if (!turn) {
-      throw new Error("Unexpected error");
-    }
+    // if (!turn) {
+    //   throw new Error("Unexpected error");
+    // }
 
-    if (!turn.ssml) {
-      throw new Error("Unexpected error");
-    }
+    // if (!turn.ssml) {
+    //   throw new Error("Unexpected error");
+    // }
 
-    const audioId = new ObjectId();
+    // const audioId = new ObjectId();
 
-    const audioGen = new SpeechGeneration(
-      turn.ssml,
-      audioId,
-      turnCtx.language,
-      turnCtx,
-      {
-        reason: "conversationTurn",
-        produced: audioId,
-      }
-    );
+    // const audioGen = new SpeechGeneration(
+    //   turn.ssml,
+    //   audioId,
+    //   turnCtx.language,
+    //   turnCtx,
+    //   {
+    //     reason: "conversationTurn",
+    //     produced: audioId,
+    //   }
+    // );
 
-    const audPromise = audioGen.generate();
+    // const audPromise = audioGen.generate();
 
-    turnCtx.addPostGen(audPromise);
+    // turnCtx.addPostGen(audPromise);
 
-    await flow.insertAITurn({
-      turn,
-      nextTurn,
-      audioId,
-    });
+    // await flow.insertAITurn({
+    //   turn,
+    //   nextTurn,
+    //   audioId,
+    // });
 
     await turnCtx.complete();
 
@@ -815,15 +815,16 @@ export class ConversationManager {
       analyze = res.analyze;
     }
 
-    const created = await flow.insertUserTurn({
-      audio_ID: input.audio_ID,
-      text,
-      analyze,
-    });
+    // const created = await flow.insertUserTurn({
+    //   audio_ID: input.audio_ID,
+    //   text,
+    //   analyze,
+    // });
 
-    await turnCtx.complete();
+    // await turnCtx.complete();
 
-    return created;
+    // return created;
+    throw new Error("Not implemented");
   }
 
   //   static _converationInputControllers: {

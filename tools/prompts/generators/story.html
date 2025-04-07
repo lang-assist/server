@@ -1,71 +1,51 @@
-<test_instructions type="STORY">
+<output>
 The material type used for interactive storytelling with questions. This type combines telling a story with interactive test questions.
 
-<output>
+You will provide the story as multiple jsonl in your response. There is only one type of jsonl. Each story part payloads have these fields:
 
-Only `parts` is required. `parts` is an array of story parts.
+<jsonl type="story_part" priority="5" repeatable="true">
 
-<field name="parts.id">
-Unique identifier for the story part.
+<field name="id">
+Unique identifier for the story part. It should be unique in the story.    
 <do>
 Unique in the story.    
 </do>
 <avoid>
-Don't duplicate id.
+Don't duplicate id in the story.    
 </avoid>
-
 <example>
 part1, scene1, intro1
 </example>
 
 </field>
 
-<field name="parts.type">
-    Type of the story part. Can be 'AUDIO' for narration or character dialogue with voice, 'PICTURE' for visual scene description, 'QUESTION' for interactive question about the story.
+<field name="type">
+Type of the story part. Can be 'AUDIO' for narration or character dialogue with voice, 'PICTURE' for visual scene description, 'QUESTION' for interactive question about the story.
 </field>
 
-<field name="parts.ssml">
-    SSML formatted text with voice and style specifications for 'AUDIO' type. Look `ssml_guidelines` for more information.
+<field name="ssml">
+SSML formatted text with voice and style specifications for 'AUDIO' type parts. Look <ssml_guidelines> for more information. Use same voice for the same character and different voices for different characters. All available voices are in the <context> section.
 </field>
 
-<field name="parts.character">
-User facing character name for 'AUDIO' type. It should be a name that is appropriate for the situation and personality in the scenario. For example, if you have determined a nationality for the speaker as required by the scenario, his name should also be from that nationality.
-
-<examples>
-$user, Nathan, Evelyn, Harper, طارق, ياسمين, 
-</examples>
-
-<do>
-- Use culturally appropriate names. 
-- Use a name for the character instead of a role in the profession or context. 
-- "Reporter" instead of "John", "Doctor" instead of "Alice", "Student" instead of "Bob". 
-- The most common names in the community should not be used. Different names should also be used.
-- Use "$narrator" for narrator. Must be starts with "$".
-</do>
-
-<avoid>
-- General tags should not be used (e.g: 'Character A').
-- Don't use names that are not culturally appropriate.
-- Don't use very common names.
-</avoid> 
-
+<field name="picturePrompt">
+ Visual scene description for image generation for 'PICTURE' type parts. Look <picture_prompt_guidelines> for more information.
 </field>
 
-<field name="parts.picturePrompt">
-    Visual scene description for image generation for 'PICTURE' type. Look `picture_prompt_guidelines` for more information.
-</field>
-
-<field name="parts.question">
-Same structure as QUIZ questions. Look `question_structure` for more information.
+<field name="question">
+Same structure as QUIZ questions. Look <question_structure> for more information.
 
 Must reference previous story parts
 
 Should test comprehension of the story so far.
 
 </field>
-
+<example>
+```jsonl { "type": "story_part", "payload": { "id": "part2", "type": "PICTURE", "picturePrompt": "A park scene on a sunny day: A family having a picnic, children playing on swings, and a dog sleeping under a tree. Natural outdoor lighting, cheerful atmosphere, 2D illustration style."} } ```jsonl 
+```jsonl { "type": "story_part", "payload": { "id": "part1", "type": "AUDIO", "ssml": "<voice name=\"en-US-SaraNeural\">Hello world!</voice>"} } ```jsonl 
+```jsonl { "type": "story_part", "payload": { "id": "part3", "type": "QUESTION", "question": { ... } } } ```jsonl 
+</example>
+</jsonl>
 </output>
-
 <story_guidelines>
 
 Story progresses through small, single-sentence audio parts. Each audip part is presented and played individually. While an audio part is playing, the closest picture part before that part is displayed. Story pauses at questions, continues after answer. 
@@ -128,4 +108,4 @@ Generally, use character voices for dialogue.
 Use narrator for narration.
 </do>
 
-</test_instructions>
+</output>

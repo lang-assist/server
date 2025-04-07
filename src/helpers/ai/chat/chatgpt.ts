@@ -1,25 +1,14 @@
 import OpenAI from "openai";
 
-import { ChatGeneration } from "./base";
-import { Chatgpt_event } from "../../../models/_index";
-import { BrocaTypes } from "../../../types";
-import { AIError } from "../../../utils/ai-types";
-import { AIModel } from "../../../types/ctx";
-import { PromptBuilder } from "../../../utils/prompter";
+import { ChatAIModel, ChatGeneration } from "./base";
+import {  Prompts } from "../../../models/_index";
+import { BrocaTypes, JsonL } from "../../../types";
 
-export class OpenAIModel extends AIModel<ChatGeneration<any>> {
+export class OpenAIModel extends ChatAIModel {
   maxTries: number = 1;
   concurrency: number = 10;
 
-  async _generate(
-    gen: ChatGeneration<any>
-  ): Promise<BrocaTypes.AI.GenerationResponse<any>> {
-    try {
-      return await this.runChat(gen.builder, gen.schema);
-    } catch (e) {
-      throw e;
-    }
-  }
+
 
   constructor(
     public modelName: string,
@@ -49,70 +38,127 @@ export class OpenAIModel extends AIModel<ChatGeneration<any>> {
     return Promise.resolve();
   }
 
-  async runChat(
-    builder: PromptBuilder,
-    schema: {
-      name: string;
-      schema: any;
-    }
-  ): Promise<{ res: any; usage: BrocaTypes.AI.Types.AIUsage }> {
-    const prompt = builder.build();
+  // async runChat(
+  //   builder: PromptBuilder,
+  //   schema: {
+  //     name: string;
+  //     schema: any;
+  //   }
+  // ): Promise<{ res: any; usage: BrocaTypes.AI.Types.AIUsage }> {
+  //   const prompt = builder.build();
 
-    const res = await this.client.chat.completions.create({
-      model: this.name,
+  //   const res = await this.client.chat.completions.create({
+  //     model: this.name,
+  //     messages: prompt,
+  //     response_format: {
+  //       type: "json_schema",
+  //       json_schema: schema.schema,
+  //     },
+  //   });
+
+  //   if (res.choices.length === 0) {
+  //     throw new AIError("Failed to generate response", null, res);
+  //   }
+
+  //   if (res.choices[0].message.refusal) {
+  //     throw new AIError("Failed to generate response", null, res);
+  //   }
+
+  //   const content = res.choices[0].message.content;
+
+  //   if (!content) {
+  //     throw new AIError("Failed to generate response", null, res);
+  //   }
+
+  //   try {
+  //     const parsed = JSON.parse(content);
+
+  //     Chatgpt_event.insertOne({
+  //       data: { res },
+  //     });
+
+  //     const usage = res.usage;
+
+  //     if (!usage) {
+  //       throw new AIError("Failed to get usage", null, res);
+  //     }
+
+
+  //     return {
+  //       res: parsed,
+  //       usage: {
+  //         input: usage.prompt_tokens,
+  //         output: usage.completion_tokens,
+  //         cachedInput: 0,
+  //         cacheWrite: 0,
+  //       },
+  //     };
+  //   } catch (e) {
+  //     Chatgpt_event.insertOne({
+  //       data: {
+  //         res,
+  //         error: e,
+  //       },
+  //     });
+  //     throw new AIError("Failed to parse response", null, e);
+  //   }
+  // }
+
+
+  async _generateStream(gen: ChatGeneration<any>, onDelta: (delta: string) => void): Promise<JsonL.GenerationResponse<boolean>> {
+    const prompt = gen.builder.build();
+
+    await Prompts.insertOne({
+      genId: gen.id,
       messages: prompt,
-      response_format: {
-        type: "json_schema",
-        json_schema: schema.schema,
-      },
+      model: this.name,
     });
 
-    if (res.choices.length === 0) {
-      throw new AIError("Failed to generate response", null, res);
-    }
 
-    if (res.choices[0].message.refusal) {
-      throw new AIError("Failed to generate response", null, res);
-    }
+    const stream = await this.client.chat.completions.create({
+      model: this.name,
+      messages: prompt,
+      stream: true,
+    });
 
-    const content = res.choices[0].message.content;
 
-    if (!content) {
-      throw new AIError("Failed to generate response", null, res);
-    }
+    for await (const part of stream) {
 
-    try {
-      const parsed = JSON.parse(content);
+      if (part.choices && part.choices.length > 0) {
+        const c = part.choices[0];
 
-      Chatgpt_event.insertOne({
-        data: { res },
-      });
-
-      const usage = res.usage;
-
-      if (!usage) {
-        throw new AIError("Failed to get usage", null, res);
+        if (c.delta) {
+          onDelta(c.delta.content!);
+        }
+        // TODO: Error handle
       }
 
+      if (part.usage) {
+        return {
+          res: true,
+          usage: {
+            input: part.usage.prompt_tokens,
+            output: part.usage.completion_tokens,
+            cachedInput: part.usage.prompt_tokens_details?.cached_tokens || 0,
+            cacheWrite: 0
+          },
+          error: undefined,
+        };
+      }
 
-      return {
-        res: parsed,
-        usage: {
-          input: usage.prompt_tokens,
-          output: usage.completion_tokens,
-          cachedInput: 0,
-          cacheWrite: 0,
-        },
-      };
-    } catch (e) {
-      Chatgpt_event.insertOne({
-        data: {
-          res,
-          error: e,
-        },
-      });
-      throw new AIError("Failed to parse response", null, e);
     }
+
+    return {
+      res: true,
+      usage: {
+        input: 0,
+        output: 0,
+        cachedInput: 0,
+        cacheWrite: 0,
+      },
+      error: undefined,
+    };
+
   }
 
   /**

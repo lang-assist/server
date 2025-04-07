@@ -4,14 +4,19 @@ You are generating IPA pronunciation for a word.
 You will receive a word or phrase `word` and a language `language`.
 </input>
 <output>
-<field name="ipa">
-IPA pronunciation of the word or phrase. A string array.
+<jsonl type="ipa" priority="5">
+Payload is an array of IPA pronunciation.
+
+<example> 
+```jsonl { "type": "ipa", "payload": ["t", "ə", "m", "ɑː", "t", "o"] } ```jsonl 
+</example>
 <example>
 for tomato in english (GB): ["t", "ə", "m", "ɑː", "t", "o"]
 for zeit in german: ["t͡s", "aɪ̯", "t"]
 for judge in english (US): ["dʒ", "ʌ", "dʒ"]
 for think in english (US): ["θ", "ɪ", "ŋ", "k"]
 </example>
-</field>
+
+</jsonl>
 </output>
 </task>

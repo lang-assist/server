@@ -78,7 +78,8 @@ class GlobalDocumentationCtx extends ChatGenerationContextWithGlobalAssistant {
     public searchTerm: string,
     public title: string,
     public searchHash: string,
-    public generatingDoc: WithId<IDocTemplate> | null = null
+    public generatingDoc: Partial<IDocTemplate> | null = null,
+    public generatingExplanations: BrocaTypes.Documentation.Explanation[] = []
   ) {
     super("documentation", "documentation");
   }
@@ -256,65 +257,82 @@ export class GlobalDocumentationManager {
       ctx
     );
 
-    const aiResult = await generation.generate();
+    const aiResult = await generation.generate(async (m) => {
+      if (m.type === "existingDoc") {
+        ctx.referencedTemplateId = m.payload;
+        if (!ObjectId.isValid(m.payload)) {
+          throw new Error("DOC ID INVALID");
+        }
 
-    const existingDoc = undefinedOrValue(aiResult.existingDoc, null);
+        const doc = await DocTemplate.findById(new ObjectId(m.payload));
 
-    // Eğer var olan bir dökümanı referans verdiyse
-    if (existingDoc) {
-      ctx.referencedTemplateId = existingDoc;
+        if (!doc) {
+          throw new Error("Referenced document not found");
+        }
 
-      if (!ObjectId.isValid(existingDoc)) {
-        throw new Error("DOC ID INVALID");
+        ctx.userDoc = await this.addDocToUser(doc, ctx.journey);
+        await ctx.complete();
+
+        return;
       }
 
-      const doc = await DocTemplate.findById(new ObjectId(existingDoc));
+      if (m.type === "doc_meta") {
+        ctx.generatingDoc = m.payload;
+      }
+
+      if (m.type === "explanation") {
+        ctx.generatingExplanations.push(m.payload);
+      }
+    });
+
+    let docId: ObjectId | null = null;
+
+    if (ctx.generatingDoc) {
+      const createdDoc = await DocTemplate.insertOne({
+        aiModel: ctx.journey.chatModel,
+        language: ctx.journey.to,
+        global: true,
+        ...ctx.generatingDoc,
+        explanations: ctx.generatingExplanations,
+      });
+
+      if (!createdDoc) {
+        throw new Error("Failed to insert new document");
+      }
+
+      docId = createdDoc._id;
+
+      const promises = await this.modifyDocAndCacheVector(
+        ctx,
+        vectorStore,
+        createdDoc._id
+      );
+
+      ctx.addPostGen(...promises);
+
+      ctx.complete();
+
+      return;
+    } else if (ctx.referencedTemplateId) {
+      const doc = await DocTemplate.findById(
+        new ObjectId(ctx.referencedTemplateId)
+      );
 
       if (!doc) {
         throw new Error("Referenced document not found");
       }
 
-      ctx.userDoc = await this.addDocToUser(doc, ctx.journey);
-      await ctx.complete();
-
-      return;
+      docId = doc._id;
+    } else {
+      throw new Error("No document to generate");
     }
-
-    // Yeni döküman oluştur
-    if (!aiResult.newDoc) {
-      throw new Error(
-        "AI did not generate a new document or reference an existing one"
-      );
-    }
-
-    const createdDoc = await DocTemplate.insertOne({
-      aiModel: ctx.journey.chatModel,
-      language: ctx.journey.to,
-      global: true,
-      ...aiResult.newDoc,
-    });
-
-    if (!createdDoc) {
-      throw new Error("Failed to insert new document");
-    }
-
-    ctx.generatedTemplateId = createdDoc._id.toHexString();
-
-    const promises = await this.modifyDocAndCacheVector(
-      ctx,
-      vectorStore,
-      createdDoc._id
-    );
-
-    ctx.addPostGen(...promises);
-
     // TODO: Store the search hash & vector store
     await DocSearch.insertOne({
       hashWithAiModel: ctx.searchHash,
-      doc_ID: createdDoc._id,
+      doc_ID: docId,
     });
 
-    ctx.userDoc = await this.addDocToUser(createdDoc, ctx.journey);
+    ctx.userDoc = await this.addDocToUser(docId, ctx.journey);
 
     ctx.complete();
 
@@ -428,7 +446,8 @@ export class GlobalDocumentationManager {
 }
 
 class StageDocumentationCtx extends ChatGenerationContextWithGlobalAssistant {
-  public generatingDoc: WithGQLID<IDocs> | null = null;
+  public generatingExplanations: BrocaTypes.Documentation.Explanation[] = [];
+  public generatedDoc: WithGQLID<IDocs> | null = null;
 
   public constructor(
     public readonly journey: WithId<IJourney>,
@@ -461,7 +480,7 @@ export class StageDocumentationManager {
 
     if (this._generatingRefs[refId]) {
       await this._generatingRefs[refId].waitUntil("generated");
-      return this._generatingRefs[refId].generatingDoc!;
+      return this._generatingRefs[refId].generatedDoc!;
     }
 
     try {
@@ -487,13 +506,16 @@ export class StageDocumentationManager {
 
       const inputMsg = msg();
 
-      inputMsg.addKv("Language", msg(`\`\`\`${journey.to}\`\`\``));
-      inputMsg.addKv("Title", msg(`\`\`\`${title}\`\`\``));
-      inputMsg.addKv("Instructions", msg(`\`\`\`${instructions}\`\`\``));
+      inputMsg.add(`<target-language>${journey.to}</target-language>`);
+      inputMsg.add(`<title>${title}</title>`);
+      inputMsg.add(`<doc-instructions>${instructions}</doc-instructions>`);
 
-      builder.userMessage(inputMsg, {
-        cache: false,
-      });
+      builder.userMessage(
+        `<request>${inputMsg.build()}</request><additinal-instruction>No need doc meta, return only explanations</additinal-instruction>`,
+        {
+          cache: false,
+        }
+      );
 
       const ctx = new StageDocumentationCtx(journey, title, instructions);
 
@@ -507,18 +529,26 @@ export class StageDocumentationManager {
         ctx
       );
 
-      const aiResult = await generation.generate();
+      await generation.generate(async (m) => {
+        if (m.type === "existingDoc") {
+          throw new Error("Existing doc not supported");
+        }
 
-      const newd = undefinedOrValue(aiResult.newDoc, null);
+        if (m.type === "explanation") {
+          ctx.generatingExplanations.push(m.payload);
+        }
+      });
 
-      if (!newd) {
+      const newd = ctx.generatingExplanations;
+
+      if (!newd || newd.length === 0) {
         const error = new AIError("Failed to generate user doc");
         ctx.addError(error);
         throw error;
       }
 
       const updatedData = GlobalDocumentationManager._recursiveUpdate(ctx, {
-        explanations: newd.explanations,
+        explanations: newd,
       });
 
       ctx.addPostGen(...updatedData.promises);
@@ -536,7 +566,7 @@ export class StageDocumentationManager {
         throw error;
       }
 
-      ctx.generatingDoc = updatedDoc;
+      ctx.generatedDoc = updatedDoc;
 
       await ctx.complete();
 

@@ -2,13 +2,13 @@
 You are generating comprehensive information about a phoneme (speech sound) in a specific language. The goal is to document all possible ways this phoneme can be written in the language's orthography.
 
 <input>
-You will receive input includes, `language` and `phoneme` (in IPA format).
+You will receive input includes, <language> and <phoneme> (in IPA format).
 </input>
 
 <output>
-You will generate output in JSON format.
+<jsonl type="graphemes" priority="5" repeatable="false">
+Payload have to be an array of graphemes.
 
-<field name="graphemes">
 All possible graphemes (spellings) that can represent this phoneme in the language.
 
 <example>
@@ -25,8 +25,14 @@ Only include direct representations: Only include graphemes that directly repres
 </constraint>
 
 <avoid>
-Don't include explanations outside the JSON structure.
+Don't include explanations outside the jsonl structure.
 </avoid>
-</field>
+
+<example>
+```jsonl { "type": "graphemes", "payload": ["f", "ph", "gh"] } ```jsonl
+</example>
+
+</jsonl>
+
 </output>
 </task>

@@ -134,7 +134,6 @@ export namespace BrocaTypes {
 
       export interface ConversationTurn {
         character: string;
-        text: string;
         ssml: string;
       }
 
@@ -147,16 +146,12 @@ export namespace BrocaTypes {
         type: "object",
         properties: {
           character: { type: "string" },
-          text: {
-            description: "User facing text",
-            type: "string",
-          },
           ssml: {
             description: "SSML for the text",
             type: "string",
           },
         },
-        required: ["character", "text", "ssml"],
+        required: ["character", "ssml"],
         additionalProperties: false,
       };
 
@@ -622,7 +617,6 @@ export namespace BrocaTypes {
     export interface Documentation {
       title: string;
       includes: string[];
-      explanations: Explanation[];
     }
 
     const documentationSchema: Schema = {
@@ -1076,8 +1070,6 @@ export namespace BrocaTypes {
       focusSkills: string[]; // writing, listening etc.
       focusAreas: string[]; // present simple tense etc.
       includedTopics: string[]; // topics included in the stage, daily life, business, kitchen, etc.
-
-      parts: StagePart[];
     }
 
     export const stageSchema: Schema = {
@@ -1168,6 +1160,7 @@ export namespace BrocaTypes {
       writing: number; // 0-100
       grammar: number; // 0-100
       vocabulary: number; // 0-100
+      pronunciation: number; // 0-100
     };
 
     export const pathLevelSchema: Schema = {
@@ -1309,35 +1302,6 @@ export namespace BrocaTypes {
       : T extends "dictionary"
       ? Dictionary.DictionaryResponse
       : never;
-    export type GenerationResponse<T> = {
-      res?: T;
-      usage?: Types.AIUsage;
-      error?: AIError;
-    };
-
-    export type MediaGenerationType = {
-      buffer: Buffer;
-      contentType: string;
-    };
-
-    export type TranscriptionGenerationType = {
-      transcription: string;
-      analyze: any;
-    };
-
-    export type MediaGenerationResponse =
-      GenerationResponse<MediaGenerationType>;
-
-    export type TranscriptionGenerationResponse =
-      GenerationResponse<TranscriptionGenerationType>;
-
-    export type ChatGenerationResponse<T extends Types.MsgGenerationType> =
-      GenerationResponse<GenResult<T>>;
-    export type AIAssistant = {
-      id: string;
-      version: number;
-      schemaVersion: number;
-    };
 
     export namespace Types {
       export type AIUsage = {
@@ -1462,4 +1426,167 @@ export namespace BrocaTypes {
         Dictionary.dictionaryResponseSchema;
     }
   }
+
+  export namespace Voice {
+    export type PronunciationAnalysis = {
+      accuracy: number;
+      fluency: number;
+      prosody: number;
+      completeness: number;
+      pronunciation: number;
+      words: WordAnalysis[];
+    };
+
+    export type PhonemeAnalysis = {
+      phoneme: string;
+      accuracy: number;
+    };
+
+    export type WordAnalysis = {
+      word: string;
+      accuracy: number;
+      phonemes: PhonemeAnalysis[];
+    };
+  }
+}
+
+export namespace JsonL {
+  export namespace Types {
+    export type AIUsage = {
+      input: number; // tokens
+      output: number; // tokens
+      cachedInput?: number; // tokens
+      cacheWrite?: number; // tokens
+    };
+
+    export type AIPricing = {
+      per: number; // per for the pricing. E.g. 1000000 for 1M tokens
+      input: number; // tokens
+      output: number; // tokens
+      cachedInput?: number; // tokens
+      cacheWrite?: number; // tokens
+    };
+
+    // export type MaterialGenerationResponse = {
+    //   details: Material.MaterialDetails;
+    //   metadata: Material.MaterialMetadata;
+    // };
+  }
+
+  export type MessageGenerationType =
+    | "quiz"
+    | "conversation"
+    | "story"
+    | "analyzer"
+    | "stager"
+    | "conversationTurn"
+    | "linguisticUnits"
+    | "documentation"
+    | "feedback"
+    | "dictionary";
+
+  export type JsonL<T extends string, S extends any> = {
+    type: T;
+    payload: S;
+  };
+
+  export type QuizJsonLs =
+    | JsonL<"prelude", BrocaTypes.Material.Quiz.QuizPrelude>
+    | JsonL<"question", BrocaTypes.Material.Quiz.QuizQuestion>;
+
+  export type ConversationJsonLs =
+    | JsonL<"character", BrocaTypes.Material.Conversation.ConversationCharacter>
+    | JsonL<"instructions", string>
+    | JsonL<"scenarioScaffold", string>
+    | JsonL<"length", number>;
+
+  export type StoryJsonLs = JsonL<"part", BrocaTypes.Material.Story.StoryPart>;
+
+  export type AnalyzerJsonLs =
+    | JsonL<
+        "observations",
+        {
+          general?: BrocaTypes.Progress.AIObservationEdit;
+          weaknesses?: BrocaTypes.Progress.AIObservationEdit;
+          strengths?: BrocaTypes.Progress.AIObservationEdit;
+        }
+      >
+    | JsonL<"level", BrocaTypes.Progress.PathLevel>
+    | JsonL<"successRate", number>
+    | JsonL<"note", string>;
+
+  export type StagerJsonLs =
+    | JsonL<"metadata", BrocaTypes.Progress.Stage>
+    | JsonL<"stage_part", BrocaTypes.Progress.StagePart>;
+
+  export type ConversationTurnJsonLs =
+    | JsonL<"character", string>
+    | JsonL<"ssml", string>
+    | JsonL<"nextTurn", string>;
+
+  export type LinguisticUnitsJsonLs = JsonL<
+    "linguistic_units",
+    BrocaTypes.LinguisticUnits.LinguisticUnitSet
+  >;
+
+  export type DocumentationJsonLs =
+    | JsonL<"existingDoc", string>
+    | JsonL<"doc_meta", BrocaTypes.Documentation.Documentation>
+    | JsonL<"explanation", BrocaTypes.Documentation.Explanation>;
+
+  export type FeedbackJsonLs = JsonL<"feedback", BrocaTypes.Feedback.Feedback>; // TODO update
+
+  export type DictionaryJsonLs = JsonL<
+    "entry",
+    BrocaTypes.Dictionary.DictionaryEntry
+  >; // TODO update
+
+  export type MessageJsonLs<T extends MessageGenerationType> = T extends "quiz"
+    ? QuizJsonLs
+    : T extends "conversation"
+    ? ConversationJsonLs
+    : T extends "story"
+    ? StoryJsonLs
+    : T extends "analyzer"
+    ? AnalyzerJsonLs
+    : T extends "stager"
+    ? StagerJsonLs
+    : T extends "conversationTurn"
+    ? ConversationTurnJsonLs
+    : T extends "linguisticUnits"
+    ? LinguisticUnitsJsonLs
+    : T extends "documentation"
+    ? DocumentationJsonLs
+    : T extends "feedback"
+    ? FeedbackJsonLs
+    : T extends "dictionary"
+    ? DictionaryJsonLs
+    : never;
+
+  export type GenerationResponse<T> = {
+    res?: T;
+    usage?: Types.AIUsage;
+    error?: AIError;
+  };
+
+  export type MediaGenerationType = {
+    buffer: Buffer;
+    contentType: string;
+  };
+
+  export type TranscriptionGenerationType = {
+    transcription: string;
+    analyze: BrocaTypes.Voice.PronunciationAnalysis;
+  };
+
+  export type MediaGenerationResponse = GenerationResponse<MediaGenerationType>;
+
+  export type TranscriptionGenerationResponse =
+    GenerationResponse<TranscriptionGenerationType>;
+
+  export type AIAssistant = {
+    id: string;
+    version: number;
+    schemaVersion: number;
+  };
 }

@@ -1,11 +1,15 @@
 <dictionary_referencing>
 Some other AI agents creates definitions, translations or phoneme sets for referenced words. For pointing to the correct dictionary entry, you need to specify the things that distinguish the word from its homograms, domain, number, pos, tense, etc. Other AI agents looks for existing entries by using the search term with a vector database.
 
+Dictionary references are JSON objects with the following fields:
+
 <field name="word">
+Both, <user-facing> and <llm-facing>.
 A base text entry of the dictionary. E.g. a word, a phrase.
 </field>
 
 <field name="search_term" optional>
+Only <llm-facing>.
 <rules>
 - Search term should be in the language of the word.
 - Must be short and concise. Is not user facing. Add important keywords separated by commas.

@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { randomString } from "../../../utils/random";
 import { SpeechGeneration, TranscriptionGeneration } from "./base";
-import { BrocaTypes } from "../../../types";
+import { BrocaTypes, JsonL } from "../../../types";
 import { AIModel } from "../../../types/ctx";
 import { AzureRes } from "../../../models/_index";
 
@@ -170,15 +170,9 @@ export class AzureSTT extends AIModel<TranscriptionGeneration> {
 
   async _init() {}
 
-  static getAnalyze(json: string):
-    | {
-        AccuracyScore: number;
-        FluencyScore: number;
-        ProsodyScore: number;
-        CompletenessScore: number;
-        PronScore: number;
-      }
-    | undefined {
+  static getAnalyze(
+    json: string
+  ): BrocaTypes.Voice.PronunciationAnalysis | undefined {
     let analyze: any | undefined = undefined;
     if (json) {
       try {
@@ -193,18 +187,41 @@ export class AzureSTT extends AIModel<TranscriptionGeneration> {
       return undefined;
     }
 
-    analyze = analyze.NBest[0].PronunciationAssessment;
+    const nbest = analyze.NBest[0];
 
-    if (!analyze) {
+    if (!nbest) {
       return undefined;
     }
 
-    return analyze;
+    const pronunciationAssessment = nbest.PronunciationAssessment;
+
+    const words = nbest.Words;
+
+    const res: BrocaTypes.Voice.PronunciationAnalysis = {
+      accuracy: pronunciationAssessment.AccuracyScore,
+      fluency: pronunciationAssessment.FluencyScore,
+      prosody: pronunciationAssessment.ProsodyScore,
+      completeness: pronunciationAssessment.CompletenessScore,
+      pronunciation: pronunciationAssessment.PronScore,
+      words: [],
+    };
+
+    for (const word of words) {
+      res.words.push({
+        word: word.Word,
+        accuracy: word.PronunciationAssessment.AccuracyScore,
+        phonemes: word.Phonemes.map((p: any) => ({
+          phoneme: p.Phoneme,
+          accuracy: p.PronunciationAssessment.AccuracyScore,
+        })),
+      });
+    }
+    return res;
   }
 
   async _generate(
     gen: TranscriptionGeneration
-  ): Promise<BrocaTypes.AI.TranscriptionGenerationResponse> {
+  ): Promise<JsonL.TranscriptionGenerationResponse> {
     const { audio } = gen;
 
     const pushStream = sdk.AudioInputStream.createPushStream();
@@ -232,8 +249,6 @@ export class AzureSTT extends AIModel<TranscriptionGeneration> {
     pronunciationAssessmentConfig.phonemeAlphabet = "IPA";
 
     pronunciationAssessmentConfig.applyTo(speechRecognizer);
-
-    console.log(speechRecognizer.properties);
 
     let duration = 0;
 
@@ -304,7 +319,7 @@ export class AzureSTT extends AIModel<TranscriptionGeneration> {
 export class AzureTTS extends AIModel<SpeechGeneration> {
   async _generate(
     gen: SpeechGeneration
-  ): Promise<BrocaTypes.AI.MediaGenerationResponse> {
+  ): Promise<JsonL.MediaGenerationResponse> {
     try {
       const { text, language } = gen;
 

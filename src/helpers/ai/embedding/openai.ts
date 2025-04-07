@@ -1,5 +1,5 @@
 import { OpenAI } from "openai";
-import { BrocaTypes } from "../../../types";
+import { JsonL } from "../../../types";
 import { AIModel } from "../../../types/ctx";
 import { EmbeddingGeneration } from "./base";
 
@@ -8,14 +8,14 @@ export class OpenAIEmbedding extends AIModel<EmbeddingGeneration> {
     public readonly name: string,
     public readonly apiKey: string,
     public readonly baseUrl: string,
-    pricing: BrocaTypes.AI.Types.AIPricing
+    pricing: JsonL.Types.AIPricing
   ) {
     super("embedding", pricing);
   }
 
   async _generate(
     gen: EmbeddingGeneration
-  ): Promise<BrocaTypes.AI.GenerationResponse<any>> {
+  ): Promise<JsonL.GenerationResponse<any>> {
     try {
       const res = await this.client.embeddings.create({
         model: this.name,

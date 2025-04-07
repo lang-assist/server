@@ -34,13 +34,13 @@ import {
 import { undefinedOrValue } from "../../../utils/validators";
 import { WithGQLID } from "../../db";
 import { StageDocumentationManager } from "../documentation";
-import { TermManager } from "../term";
-import { msg, PromptBuilder } from "../../../utils/prompter";
+import { msg, PromptBuilder, withTag } from "../../../utils/prompter";
 import {
   describeMaterial,
   instructions,
   journeySummary,
   progressSummary,
+  summarizePronunciationAnalysis,
 } from "../../prompts";
 import { GqlTypes } from "../../../utils/gql-types";
 import {
@@ -706,13 +706,25 @@ export class ProgressHelper {
 
       const prompt = await ctx.getAnalysisPrompt();
 
-      const aiRes = await new ChatGeneration(
-        "analyzer",
-        prompt,
-        ctx
-      ).generate();
+      await new ChatGeneration("analyzer", prompt, ctx).generate(async (m) => {
+        if (m.type === "level") {
+          ctx.newLevel = m.payload;
+        }
 
-      const newLevel = undefinedOrValue(aiRes.newLevel, null);
+        if (m.type === "note") {
+          ctx.note = m.payload;
+        }
+
+        if (m.type === "observations") {
+          ctx.observations = m.payload;
+        }
+
+        if (m.type === "successRate") {
+          ctx.successRate = m.payload;
+        }
+      });
+
+      const newLevel = ctx.newLevel;
 
       const pathUpdates: any = {};
 
@@ -724,7 +736,7 @@ export class ProgressHelper {
         });
       }
 
-      const general = undefinedOrValue(aiRes.general, null);
+      const general = ctx.observations.general;
 
       if (general) {
         const updatedGeneral = this.updateArray(
@@ -735,7 +747,7 @@ export class ProgressHelper {
         pathUpdates["progress.general"] = updatedGeneral;
       }
 
-      const strongPoints = undefinedOrValue(aiRes.strongPoints, null);
+      const strongPoints = ctx.observations.strengths;
 
       if (strongPoints) {
         const updatedStrongPoints = this.updateArray(
@@ -746,7 +758,7 @@ export class ProgressHelper {
         pathUpdates["progress.strongPoints"] = updatedStrongPoints;
       }
 
-      const weakPoints = undefinedOrValue(aiRes.weakPoints, null);
+      const weakPoints = ctx.observations.weaknesses;
 
       if (weakPoints) {
         const updatedWeakPoints = this.updateArray(
@@ -763,19 +775,19 @@ export class ProgressHelper {
         });
       }
 
-      const notes = undefinedOrValue(aiRes.notes, null);
+      const note = ctx.note;
 
-      if (notes) {
+      if (note) {
         const updatedNotes = ctx.flow.stage.notes ?? [];
 
-        updatedNotes.push(...notes);
+        updatedNotes.push(note);
 
         await Stage.findByIdAndUpdate(ctx.flow.stage._id, {
           $set: { notes: updatedNotes },
         });
       }
 
-      const successRate = undefinedOrValue(aiRes.successRate, null);
+      const successRate = ctx.successRate;
 
       if (successRate) {
         const behavior = msg();
@@ -875,9 +887,18 @@ export class ProgressHelper {
 
     const prompt = await ctx.getStagePrompt();
 
-    const aiRes = await new ChatGeneration("stager", prompt, ctx).generate();
+    await new ChatGeneration("stager", prompt, ctx).generate(async (m) => {
+      console.log("STAGER MESSAGE", JSON.stringify(m, null, 2));
+      if (m.type === "metadata") {
+        ctx.stageMeta = m.payload;
+      }
 
-    const newStage = await this._handleNewStage(ctx, aiRes, ctx.flow.stage);
+      if (m.type === "stage_part") {
+        ctx.stageParts.push(m.payload);
+      }
+    });
+
+    const newStage = await this._handleNewStage(ctx, ctx.flow.stage);
 
     ctx.flow.stage = newStage;
 
@@ -888,21 +909,20 @@ export class ProgressHelper {
 
   static async _handleNewStage(
     ctx: StageGeneratingContext,
-    newStageData: BrocaTypes.Progress.Stage,
     newStageObject: WithGQLID<IStage>
   ): Promise<WithGQLID<IStage>> {
-    const { imageId } = await this._prepareNewStage(ctx, newStageData);
+    const { imageId } = await this._prepareNewStage(ctx);
 
     const newStage = await Stage.findByIdAndUpdate(newStageObject._id, {
       $set: {
-        name: newStageData.name,
-        description: newStageData.description,
-        imagePrompt: newStageData.imagePrompt,
+        name: ctx.stageMeta?.name,
+        description: ctx.stageMeta?.description,
+        imagePrompt: ctx.stageMeta?.imagePrompt,
         imageId: imageId,
         status: "GENERATED",
-        focusAreas: newStageData.focusAreas,
-        focusSkills: newStageData.focusSkills,
-        includedTopics: newStageData.includedTopics,
+        focusAreas: ctx.stageMeta?.focusAreas,
+        focusSkills: ctx.stageMeta?.focusSkills,
+        includedTopics: ctx.stageMeta?.includedTopics,
       },
     });
 
@@ -913,13 +933,10 @@ export class ProgressHelper {
     return newStage;
   }
 
-  static async _prepareNewStage(
-    ctx: StageGeneratingContext,
-    newStageData: BrocaTypes.Progress.Stage
-  ): Promise<{
+  static async _prepareNewStage(ctx: StageGeneratingContext): Promise<{
     imageId: string;
   }> {
-    const parts = newStageData.parts;
+    const parts = ctx.stageParts;
 
     const nParts = [];
 
@@ -945,9 +962,7 @@ export class ProgressHelper {
             {
               stage_ID: ctx.flow.stage._id,
               type: "TEST",
-
               explanation: taskPart.explanation,
-
               material: {
                 type: taskPart.content.type,
                 improves: taskPart.content.improves ?? [],
@@ -1230,9 +1245,9 @@ export class ProgressHelper {
     //   newStageData.tasks = tasks;
     // }
 
-    if (newStageData.imagePrompt) {
+    if (ctx.stageMeta?.imagePrompt) {
       const imageId = new ObjectId();
-      const gen = new ImageGeneration(newStageData.imagePrompt, imageId, ctx, {
+      const gen = new ImageGeneration(ctx.stageMeta.imagePrompt, imageId, ctx, {
         reason: "new stage",
       });
 
@@ -1250,7 +1265,7 @@ export class ProgressHelper {
     journey: WithGQLID<IJourney>,
     user: WithGQLID<IUser>,
     input: GqlTypes.User.CreateJourneyInput
-  ) {
+  ): Promise<WithGQLID<IJourney>> {
     const ctx = new _InitialAnalyzerCtx(journey, user, input);
 
     const builder = new PromptBuilder();
@@ -1274,7 +1289,7 @@ export class ProgressHelper {
     const refText = input.referenceText;
 
     req.add(
-      `When the learning journey creating, we asked some questions to the user:`
+      `When the learning journey creating, we asked some questions to the user with a reference text:`
     );
 
     req.add(
@@ -1289,7 +1304,11 @@ export class ProgressHelper {
 
     req.addKv("Reference Text", refText);
 
-    req.add("User's answers:");
+    builder.assistantMessage(withTag(req, "context"));
+
+    const ans = msg();
+
+    ans.add("User's answers:");
 
     if (input.recording) {
       const buffer = await StorageService.getAudio(input.recording);
@@ -1310,45 +1329,68 @@ export class ProgressHelper {
         const m = msg();
 
         m.addKv("Transcription", transcriptionResult.transcription);
-        m.addKv("Analysis", (s) => {
-          Object.entries(analysis).map(([key, value]) => {
-            s.addKv(key, `${value}`);
-          });
-        });
+        m.addKv("Analysis", summarizePronunciationAnalysis(analysis));
 
-        req.addKv("1. Recording", m.build());
+        ans.addKv("1. Recording", withTag(m.build(), "user-spoken"));
       } else {
-        req.addKv("1. Recording", transcriptionResult.transcription);
+        ans.addKv(
+          "1. Recording",
+          withTag(transcriptionResult.transcription, "user-spoken")
+        );
       }
     } else if (input.repating) {
-      req.addKv("1. Repating", input.repating);
+      ans.addKv("1. Repating", withTag(input.repating, "user-wrote"));
     } else {
-      req.add(`1. User marked they can't read the reference text`);
+      ans.add(`1. User marked they can't read the reference text`);
     }
 
     if (input.description) {
-      req.addKv("2. Description", input.description);
+      ans.addKv("2. Description", withTag(input.description, "user-wrote"));
     } else {
-      req.add(
+      ans.add(
         `2. User marked they can't read ${toName} or translate the reference text`
       );
     }
 
     if (input.introduction) {
-      req.addKv("3. Introduction", input.introduction);
+      ans.addKv("3. Introduction", withTag(input.introduction, "user-wrote"));
     } else {
-      req.add(
+      ans.add(
         `3. User marked they can't introduce themselves or they can't write in ${toName}`
       );
     }
 
-    builder.userMessage(req.build());
+    builder.userMessage(withTag(ans, "answers"));
+
+    builder.userMessage(
+      withTag(
+        `Analyze the user's answers and provide observations and levels. No note and success rate needed`,
+        "request"
+      )
+    );
 
     const gen = new ChatGeneration<"analyzer">("analyzer", builder, ctx);
 
-    const aiRes = await gen.generate();
+    await gen.generate(async (m) => {
+      console.log("ASSISTANT MESSAGE", JSON.stringify(m, null, 2));
+      if (m.type === "level") {
+        ctx.newLevel = m.payload;
+      }
 
-    const newLevel = undefinedOrValue(aiRes.newLevel, null);
+      if (m.type === "note") {
+        // ignore
+      }
+
+      if (m.type === "observations") {
+        ctx.observations = m.payload;
+      }
+
+      if (m.type === "successRate") {
+        // ignore
+      }
+    });
+
+    const newLevel = ctx.newLevel;
 
     const pathUpdates: any = {};
 
@@ -1360,7 +1402,7 @@ export class ProgressHelper {
       });
     }
 
-    const general = undefinedOrValue(aiRes.general, null);
+    const general = ctx.observations.general;
 
     if (general) {
       const updatedGeneral = this.updateArray(
@@ -1371,7 +1413,7 @@ export class ProgressHelper {
       pathUpdates["progress.general"] = updatedGeneral;
     }
 
-    const strongPoints = undefinedOrValue(aiRes.strongPoints, null);
+    const strongPoints = ctx.observations.strengths;
 
     if (strongPoints) {
       const updatedStrongPoints = this.updateArray(
@@ -1382,7 +1424,7 @@ export class ProgressHelper {
       pathUpdates["progress.strongPoints"] = updatedStrongPoints;
     }
 
-    const weakPoints = undefinedOrValue(aiRes.weakPoints, null);
+    const weakPoints = ctx.observations.weaknesses;
 
     if (weakPoints) {
       const updatedWeakPoints = this.updateArray(
@@ -1434,4 +1476,15 @@ class _InitialAnalyzerCtx extends ChatGenerationContextWithGlobalAssistant {
   public get chatModel() {
     return this.journey.chatModel as keyof typeof AIModels.chat;
   }
+
+  public get sttModel() {
+    return this.journey.sttModel as keyof typeof AIModels.stt;
+  }
+
+  public newLevel: BrocaTypes.Progress.PathLevel | null = null;
+  public observations: {
+    general?: BrocaTypes.Progress.AIObservationEdit;
+    strengths?: BrocaTypes.Progress.AIObservationEdit;
+    weaknesses?: BrocaTypes.Progress.AIObservationEdit;
+  } = {};
 }

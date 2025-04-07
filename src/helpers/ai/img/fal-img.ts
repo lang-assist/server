@@ -1,7 +1,7 @@
 import { fal } from "@fal-ai/client";
 import { AIModel } from "../../../types/ctx";
 import { ImageGeneration } from "./base";
-import { BrocaTypes } from "../../../types";
+import { JsonL } from "../../../types";
 
 export class FalImgGen extends AIModel<
   ImageGeneration,
@@ -35,7 +35,7 @@ export class FalImgGen extends AIModel<
   async _init(): Promise<void> {}
 
   async _generate(gen: ImageGeneration): Promise<
-    BrocaTypes.AI.GenerationResponse<{
+    JsonL.GenerationResponse<{
       buffer: Buffer;
       contentType: string;
     }>

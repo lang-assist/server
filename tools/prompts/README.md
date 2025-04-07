@@ -87,6 +87,7 @@ Located in the `shared/` directory, these are reusable prompt parts used across 
 - `ssml.md`: Speech Synthesis Markup Language guidelines
 - `dict.md`: Dictionary-related guidelines
 - `doc.md`: Documentation-related guidelines
+- `tags.html`: XML-style tags guidelines for system prompts
 
 ### Generator Components
 

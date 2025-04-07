@@ -4,6 +4,8 @@ import { BaseMaterialTypeHelper } from "./type-helpers";
 import { MaterialGenerationContext } from "./ctx";
 import { AIError } from "../../../utils/ai-types";
 import { settlePromises } from "../../../utils/constants";
+import { PromptBuilder } from "../../../utils/prompter";
+import { BrocaTypes, JsonL } from "../../../types";
 
 // export class MaterialGenStep extends GenerationStep<
 //   MaterialGenContext,
@@ -50,6 +52,49 @@ export class MaterialGenerationHelper {
     [key: string]: MaterialGenerationContext;
   } = {};
 
+  static async genQuiz(
+    ctx: MaterialGenerationContext,
+    prompt: PromptBuilder
+  ): Promise<JsonL.GenerationResponse<boolean>> {
+    return await new ChatGeneration(ctx.type as "quiz", prompt, ctx).generate(
+      async (m) => {
+        if (m.type === "prelude") {
+          ctx.preludes.push(m.payload);
+        }
+
+        if (m.type === "question") {
+          ctx.questions.push(m.payload);
+        }
+      }
+    );
+  }
+
+  static async genStory(
+    ctx: MaterialGenerationContext,
+    prompt: PromptBuilder
+  ): Promise<JsonL.GenerationResponse<boolean>> {
+    return await new ChatGeneration(ctx.type as "story", prompt, ctx).generate(
+      async (m) => {
+        if (m.type === "part") {
+          ctx.storyParts.push(m.payload);
+        }
+      }
+    );
+  }
+
+  static async genConversation(
+    ctx: MaterialGenerationContext,
+    prompt: PromptBuilder
+  ): Promise<JsonL.GenerationResponse<boolean>> {
+    return await new ChatGeneration(
+      ctx.type as "conversation",
+      prompt,
+      ctx
+    ).generate(async (m) => {
+      ctx.conversationDatas.push(m.payload);
+    });
+  }
+
   static async gen(ctx: MaterialGenerationContext): Promise<void> {
     const materialId = ctx.requiredMaterial._id.toString();
 
@@ -69,11 +114,42 @@ export class MaterialGenerationHelper {
         ctx.type as "quiz" | "story" | "conversation",
         prompt,
         ctx
-      ).generate();
+      ).generate(async (m) => {
+        if (m.type === "prelude") {
+          ctx.preludes.push(m.payload);
+        }
+
+        if (m.type === "question") {
+          ctx.questions.push(m.payload);
+        }
+      });
 
       ctx.rawResponse = aiRes;
 
-      const details = undefinedOrValue(aiRes.details, null);
+      let details: BrocaTypes.Material.MaterialDetails | null = null;
+
+      if (ctx.type === "quiz") {
+        details = {
+          preludes: ctx.preludes,
+          questions: ctx.questions,
+        } as BrocaTypes.Material.Quiz.QuizDetails;
+      }
+
+      if (ctx.type === "story") {
+        details = {
+          parts: ctx.storyParts,
+        } as BrocaTypes.Material.Story.StoryDetails;
+      }
+
+      if (ctx.type === "conversation") {
+        details = {} as BrocaTypes.Material.Conversation.ConversationDetails;
+        for (const data of ctx.conversationDatas) {
+          details = {
+            ...details,
+            ...data,
+          };
+        }
+      }
 
       if (!details) {
         throw new Error("Material not found");

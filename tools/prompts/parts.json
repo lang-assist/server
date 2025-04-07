@@ -18,7 +18,8 @@
     "stager": "generators/stager.html",
     "html": "shared/html.html",
     "global_grapheme": "generators/global-grapheme.html",
-    "global_phoneme": "generators/global-phoneme.html"
+    "global_phoneme": "generators/global-phoneme.html",
+    "tags": "shared/tags.html"
   },
   "instructions": {
     "quiz": {
@@ -70,6 +71,10 @@
     "stager": {
       "role": "STAGE GENERATOR",
       "parts": ["stager", "picture_prompt", "difficulty"]
+    },
+    "system": {
+      "role": "SYSTEM PROMPTS",
+      "parts": ["tags"]
     }
   }
 }

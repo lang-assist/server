@@ -1,7 +1,6 @@
 import { AzureOpenAIModel } from "./helpers/ai/chat/azure-chatgpt";
 import { OpenAIModel } from "./helpers/ai/chat/chatgpt";
 import { ClaudeModel } from "./helpers/ai/chat/claude";
-import { OpenAIModelAssistant } from "./helpers/ai/chat/chatgpt-assistant";
 import { VectorDBBase, VectorStore } from "./helpers/vectors";
 import { MongoDBVectorDB } from "./helpers/vectors/dbs/mongodb";
 import { RedisVectorDB } from "./helpers/vectors/dbs/redis";
@@ -20,7 +19,6 @@ import {
   QuizMaterialTypeHelper,
   StoryMaterialTypeHelper,
 } from "./helpers/gen/materials/type-helpers";
-import { AzureAssistant } from "./helpers/ai/chat/azure-assistant";
 import { BrocaTypes } from "./types";
 import { AIModels } from "./utils/constants";
 import Decimal from "decimal.js";
@@ -55,11 +53,7 @@ const prices: {
     output: 10,
     cachedInput: 1.25,
   }),
-  azure_gpt_4o_assistant: millionTokenPrice({
-    input: 2.5,
-    output: 10,
-    cachedInput: 1.25,
-  }),
+
   azure_o1: millionTokenPrice({
     input: 15,
     output: 60,
@@ -92,14 +86,6 @@ const prices: {
     input: 0.25,
     output: 1,
   }),
-  gpt_4o_assistant: millionTokenPrice({
-    input: 0.25,
-    output: 1,
-  }),
-  gpt_4o_mini_assistant: millionTokenPrice({
-    input: 0.015,
-    output: 0.06,
-  }),
   o1: millionTokenPrice({
     input: 15,
     output: 60,
@@ -121,21 +107,6 @@ export async function initServices() {
   await GlobalAssistantManager.init();
   await VectorDBBase.init([new MongoDBVectorDB(), new RedisVectorDB()]);
   await AIModel.init({
-    azure_gpt_4o_assistant: new AzureAssistant(
-      "gpt-4o",
-      process.env.AZURE_AI_KEY!,
-      prices.azure_gpt_4o_assistant,
-      "https://broca-oai418024195739.cognitiveservices.azure.com/",
-      "gpt-4o-assistant"
-    ),
-    gpt_4o_assistant: new OpenAIModelAssistant(
-      "gpt-4o",
-      prices.gpt_4o_assistant
-    ),
-    gpt_4o_mini_assistant: new OpenAIModelAssistant(
-      "gpt-4o-mini",
-      prices.gpt_4o_mini_assistant
-    ),
     gpt_4o: new OpenAIModel(
       "gpt-4o",
       process.env.OPENAI_API_KEY!,

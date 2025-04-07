@@ -1,11 +1,11 @@
-import { BrocaTypes } from "../types";
+import { JsonL } from "../types";
 
 export class PictureHelper {
   public static generating: {
-    [key: string]: Promise<BrocaTypes.AI.MediaGenerationType> | undefined;
+    [key: string]: Promise<JsonL.MediaGenerationType> | undefined;
   } = {};
 
-  static addGen(id: string, gen: Promise<BrocaTypes.AI.MediaGenerationType>) {
+  static addGen(id: string, gen: Promise<JsonL.MediaGenerationType>) {
     this.generating[id] = gen;
     gen.finally(() => {
       delete this.generating[id];

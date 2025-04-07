@@ -1,5 +1,5 @@
 import { AzureOpenAI } from "openai";
-import { BrocaTypes } from "../../../types";
+import { BrocaTypes, JsonL } from "../../../types";
 import { AIModel } from "../../../types/ctx";
 import { EmbeddingGeneration } from "./base";
 
@@ -16,7 +16,7 @@ export class AzureOpenAIEmbedding extends AIModel<EmbeddingGeneration> {
 
   async _generate(
     gen: EmbeddingGeneration
-  ): Promise<BrocaTypes.AI.GenerationResponse<any>> {
+  ): Promise<JsonL.GenerationResponse<any>> {
     try {
       const res = await this.client.embeddings.create({
         model: this.name,

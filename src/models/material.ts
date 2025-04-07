@@ -2,7 +2,7 @@ import { ObjectId } from "mongodb";
 import { COLLECTIONS } from "../utils/constants";
 
 import { DbHelper, TimeFields } from "../helpers/db";
-import { BrocaTypes } from "../types";
+import { BrocaTypes, JsonL } from "../types";
 
 interface IModel extends TimeFields {
   user_ID: ObjectId;
@@ -18,7 +18,7 @@ interface IModel extends TimeFields {
   improves: string[];
   measures: string[];
   instructions: string;
-  assistant?: BrocaTypes.AI.AIAssistant;
+  assistant?: JsonL.AIAssistant;
   threadId?: string;
   genId: string;
   is_extra: boolean;

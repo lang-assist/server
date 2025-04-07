@@ -2,51 +2,37 @@
 You are generating comprehensive phoneme and form information about a grapheme (written symbol) in a specific language. The goal is to document how this grapheme is used in the language.
 
 <input>
-You will receive input includes, `language` and `grapheme`.
+You will receive input includes, <language> and <grapheme>.
 </input>
 
 <output>
-You will generate output in JSON format.
+You will generate 2 types of jsonl: form and phoneme.
 
-<field name="forms" optional>
-If the grapheme has different script forms (generally appears in arabic like languages), you should generate all possible forms.
+<jsonl type="form" priority="5" repeatable="true">
+If the grapheme has different script forms (generally appears in arabic like languages), you should generate all possible forms. Each form is a separate jsonl.
 
-Add 1-3 example word references for each form. Look `dictionary_referencing` for referencing to words.
+Each form type jsonl payloads are object with these fields:
+- form: The form of the grapheme. E.g. "ظ", "ظـ", "ـظـ".
+- rules: Description of when this form is used. A short sentence or a phrase. E.g. beginning of a word, after a vowel, between vowels, "" (empty string), etc.
+- examples: Example words that have this form. Array of <dictionary_referencing> format. 1-3 examples.
 
-<example>
-For "ظ", include form objects for "ظ", "ظـ", "ـظـ" as described in the JSON schema. 
-</example>
+</jsonl>
 
-</field>
-
-<field name="phonemes">
+<jsonl type="phoneme" priority="4" repeatable="true">
 All possible phonemes for the grapheme. At least include 1 phoneme required.
+phoneme type jsonl payloads are object with these fields:
+- pronunciation: The pronunciation of the phoneme in IPA format. E.g. "θ", "ð", etc.
+- rules: Description of in which case this grapheme will have this phoneme. A short sentence or a phrase. E.g. beginning of a word, after a vowel, between vowels, "" (empty string), etc.
+- examples: Example words that have this phoneme. <dictionary_referencing> format. 1-3 examples.
 
 <example>
 For "th", include phoneme objects for "θ", "ð", and other phonemes.
 </example>
 
-<field name="phonemes.pronunciation">
-The pronunciation of the phoneme in IPA format.
-</field>
-
-<field name="phonemes.rules">
-Description of in which case this grapheme will have this phoneme. A short sentence or a phrase.
-<example>
-Beginning of a word, after a vowel, between vowels, "" (empty string), etc.
-</example>
-
-<avoid>
-Don't describe the phoneme rules like "dental fricative", "voiced", "voiceless", etc.
-</avoid>
-</field>
-
-<field name="phonemes.examples">
-Example words that have this phoneme. `dictionary_referencing` format. 1-3 examples.
 <example>
 For "θ", include examples for "think", "birthday", "path".
 </example>
-</field>
-</field>
+
+</jsonl>
 </output>
 </task>

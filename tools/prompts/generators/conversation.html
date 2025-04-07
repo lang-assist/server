@@ -1,30 +1,17 @@
-<test_instructions type="CONVERSATION">
-<output_fields>
-<field name="scenarioScaffold">
-Conversation's scenario skeleton. Determine a topic open to a dialogue between 2 and 5 people and characters appropriate to that topic and situation. Assign a role to the user in the instructions that is appropriate to the topic and situation. Then, the user will speak in accordance with this role and we will take this into consideration when making our evaluation. Instead of simple scenario like how is day going, create a situation specific to the user (if we have information, it can be from their relevant fields). Maybe a philosophical discussion, maybe a dialogue between drivers after a car accident, maybe a doctor-patient interview. Create a situation with creative examples and place the user there nicely. You can also create funny situations that will entertain the user.
 
+<output>
+Your must provide 4 type of jsonl in your response: `scenarioScaffold`, `characters`, `instructions`, `length`. This field is <llm-facing>.
+<jsonl type="instructions" priority="5">
+A <user-facing> instructions given to the user to speak according to the scenario. The user's speech must follow this instruction.
 <example>
- A conversation about the weather. $user is talking to a meteorologist Micheal. The meteorologist always uses technical jargon, which is annoying. The user has difficulty understanding what is being said
+```jsonl { "type": "instructions", "payload": "You are a patient. You are talking to a doctor. You are talking about your headache." } ```jsonl 
 </example>
-
-<example>
-A conversation after a car accident between Alice and Bob's car. Alice is very angry and Bob is very sad. They are talking about the accident and how it happened. $user will try to calm the fight between them.
-</example>
-
-</field>
-
-<field name="characters">
-Characters are objects that will be used in the scenario. All characters in the scenario must be in this array. 
-
-The information about the characters must be descriptive and clear. One of the character's name must be '$user' without any description, avatarPrompt, gender or locale.
-
-Character items fields:
-
-<field name="characters.name">
-Name of the character. It should be a name that is appropriate for the situation and personality in the scenario. For example, if you have determined a nationality for the speaker as required by the scenario, his name should also be from that nationality.
-
+</jsonl>
+<jsonl type="character" priority="4" repeatable="true">
+One of the character always is user. Determine the other characters that will be used in the scenario. Each character described as an object with fields:
+- `name`: The name of the character. Name of the character. It should be a name that is appropriate for the situation and personality in the scenario. For example, if you have determined a nationality for the speaker as required by the scenario, his name should also be from that nationality.
 <examples>
-$user, Nathan, Evelyn, Harper, طارق, ياسمين, 
+Nathan, Evelyn, Harper, طارق, ياسمين, 
 </examples>
 
 <do>
@@ -40,69 +27,39 @@ $user, Nathan, Evelyn, Harper, طارق, ياسمين,
 - Don't use very common names.
 </avoid>
 
+
 <do>
 One Exception: If the topic and what is to be learned is the first encounter, "Student", "A Man" etc. can be used as descriptors.
 </do>
 
-
-</field>
-
-<field name="characters.description">
-The description of the character. It must indicate the character's role. It will also used to generate conversation. So the description of the character will be used as prompt.
+- `description`: The description of the character. It must indicate the character's role. It will also used to generate conversation. So the description of the character will be used as prompt but it is <user-facing>.
 
 <examples>
 "He is a student. He is very 'pessimistic'. He guards that 'the world is a bad place.'"
 "She is a doctor. She is a mother of 2 children. She is optimistic. She is guards that 'the world is a good place.'"
 </examples>
 
-</field>
+- `avatarPrompt`: Prompt for avatar generation. See <picture_prompt_guidelines>.
+- `gender`: The gender of the character. It must indicate the character's gender. 'Male', 'Female' or 'Neutral' should be used.
+- `locale`: The language of the character. Use en_US, tr_TR, de_DE, fr_FR, es_ES, it_IT, etc.
 
-<field name="characters.avatarPrompt">
-Prompt for avatar generation. Required if name is not $user. If $user not allowed. It will also used to generate conversation. So the description of the character will be used as prompt.
+Give a jsonl for each character.
 
-See `picture_prompt_guidelines`
-
-<examples>
-"A 25 year old woman with blue eyes and long brown hair. She is wearing a white coat and a pair of glasses."
-</examples>
-
-</field>
-
-<field name="characters.gender">
-The gender of the character. It must indicate the character's gender. 'Male', 'Female' or 'Neutral' should be used.
-
-<examples>
-Male, Female, Neutral
-</examples>
-
-</field>
-
-<field name="characters.locale">
-The language of the character.
-
-<examples> 
-en-US, tr-TR, de-DE, fr-FR, es-ES, it-IT, etc
-</examples>
-
-</field>
-
-<field name="instructions">
-Instructions given to the user to speak according to the scenario. The user's speech must follow this instruction.
-
-<examples>
-"You are a patient. You are talking to a doctor. You are talking about your headache."
-"You are talking with a meteorologist Micheal. Try to figure out what the weather will be like tomorrow."
-</examples>
-
-</field>
-
-<field name="length">
+<example>
+```jsonl { "type": "character", "payload": { "name": "Nathan", "description": "He is a student. He is very 'pessimistic'. He guards that 'the world is a bad place.'", "avatarPrompt": "A 25 year old man with brown hair and brown eyes. He is wearing a black jacket and a pair of glasses.", "gender": "Male", "locale": "en_US" } } ```jsonl 
+</example>
+</jsonl>
+<jsonl type="scenarioScaffold" priority="3">
+Conversation's scenario skeleton. Determine a topic open to a dialogue between 2 and 5 people and characters appropriate to that topic and situation. Assign a role to the user in the instructions that is appropriate to the topic and situation. Then, the user will speak in accordance with this role and we will take this into consideration when making our evaluation. Instead of simple scenario like how is day going, create a situation specific to the user (if we have information, it can be from their relevant fields). Maybe a philosophical discussion, maybe a dialogue between drivers after a car accident, maybe a doctor-patient interview. Create a situation with creative examples and place the user there nicely. You can also create funny situations that will entertain the user.
+This field is <llm-facing>.
+<example>
+````jsonl { "type": "scenarioScaffold", "payload": "A conversation about the weather. $user is talking to a meteorologist Micheal. The meteorologist always uses technical jargon, which is annoying. The user has difficulty understanding what is being said" } ````
+</example>
+</jsonl>
+<jsonl type="length" priority="2">
 It roughly indicates how many turns the conversation will take. It should be between 5-50 turns.
-
-<examples>
-10, 20, 30
-</examples>
-
-</field>
-</output_fields>
-</test_instructions>
+<example>
+````jsonl { "type": "length", "payload": 10 } ````
+</example>
+</jsonl>
+</output>

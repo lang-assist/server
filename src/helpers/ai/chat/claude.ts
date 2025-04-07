@@ -1,31 +1,23 @@
 import { ObjectId } from "mongodb";
 import { Anthropic, AnthropicError, RateLimitError } from "@anthropic-ai/sdk";
 import { AIModel } from "../../../types/ctx";
-import { ChatGeneration } from "./base";
+import { ChatAIModel, ChatGeneration } from "./base";
 import { PromptBuilder } from "../../../utils/prompter";
-import { BrocaTypes } from "../../../types";
+import { BrocaTypes, JsonL } from "../../../types";
 import { AIError, AIRateLimitError } from "../../../utils/ai-types";
 import { Chatgpt_event, Prompts } from "../../../models/_index";
 import { Schema } from "jsonschema";
 
 type AIUsage = BrocaTypes.AI.Types.AIUsage;
 
-export class ClaudeModel extends AIModel<ChatGeneration<any>> {
-  async _generate(
-    gen: ChatGeneration<any>
-  ): Promise<BrocaTypes.AI.GenerationResponse<any>> {
-    try {
-      return await this.runChat(gen.builder, gen.schema);
-    } catch (e) {
-      throw e;
-    }
-  }
+export class ClaudeModel extends ChatAIModel {
+
   maxTries: number = 1;
   concurrency: number = 10;
   constructor(
     public modelName: string,
     public apiKey: string,
-    public pricing: BrocaTypes.AI.Types.AIPricing,
+    public pricing: JsonL.Types.AIPricing,
     public baseUrl?: string
   ) {
     super("chat", pricing);
@@ -49,81 +41,48 @@ export class ClaudeModel extends AIModel<ChatGeneration<any>> {
     return Promise.resolve();
   }
 
-  async runChat(
-    builder: PromptBuilder,
-    schema: {
-      name: string;
-      schema: Schema;
+  async _generateStream(gen: ChatGeneration<any>, onDelta: (delta: string) => void): Promise<JsonL.GenerationResponse<boolean>> {
+    const { context, messages } = gen.builder.buildForClaude();
+
+    await Prompts.insertOne({
+      genId: "claude",
+      messages: messages,
+      system: context,
+      model: this.name,
+    });
+
+
+    const str = this.client.messages.stream({
+      model: this.name,
+      messages: messages,
+      system: context,
+      max_tokens: 8192,
+      stream: true,
+    });
+
+
+    for await (const part of str) {
+       if (part.type === "content_block_delta") {
+          const delta = part.delta;
+          if (delta.type === "text_delta") {
+             onDelta(delta.text);
+          }
+       }
     }
-  ): Promise<{ res: any; usage: AIUsage }> {
-    try {
-      const { context, messages } = builder.buildForClaude();
 
-      await Prompts.insertOne({
-        genId: "claude",
-        messages: messages,
-        system: context,
-        model: this.name,
-        schema: schema.schema as any,
-        name: schema.name,
-      });
+    const f = await str.finalMessage();
 
-      const res = await this.client.messages.create({
-        model: this.name,
-        messages: messages,
-        system: context,
-        max_tokens: 8192,
-        tools: [
-          {
-            input_schema: schema.schema as any,
-            name: schema.name,
-            cache_control: {
-              type: "ephemeral",
-            },
-          },
-        ],
-        tool_choice: {
-          type: "tool",
-          name: schema.name,
-        },
-      });
+    const usage = f.usage;
 
-      if (res.content.length === 0) {
-        throw new AIError("Failed to generate response", null, res);
-      }
-
-      if (res.content[0].type === "tool_use") {
-        const input = res.content[0].input as any;
-        Chatgpt_event.insertOne({
-          data: {
-            model: this.name,
-            res,
-          },
-        });
-        const usage = res.usage;
-        return {
-          res: input,
-          usage: {
-            input: usage.input_tokens,
-            output: usage.output_tokens,
-            cachedInput: usage.cache_read_input_tokens ?? 0,
-            cacheWrite: usage.cache_creation_input_tokens ?? 0,
-          },
-        };
-      } else {
-        throw new AIError("Failed to generate response", null, res);
-      }
-    } catch (e) {
-      if (e instanceof AnthropicError) {
-        if (e instanceof RateLimitError) {
-          throw new AIRateLimitError(
-            "Rate limit exceeded",
-            (Number(e.headers["retry-after"]) ?? 0) * 1000 + Date.now()
-          );
-        }
-      }
-
-      throw e;
-    }
+    return {
+      res: true,
+      usage: {
+        input: usage.input_tokens,
+        output: usage.output_tokens,
+        cachedInput: usage.cache_read_input_tokens ?? 0,
+        cacheWrite: usage.cache_creation_input_tokens ?? 0,  
+      },
+      error: undefined,
+    };
   }
 }

@@ -22,30 +22,30 @@ export class FeedbackHelper {
       ctx.startGeneration();
       const prompt = await ctx.getFeedbackPrompt();
 
-      const aiRes = await new ChatGeneration(
-        "feedback",
-        prompt,
-        ctx
-      ).generate();
+      // const aiRes = await new ChatGeneration(
+      //   "feedback",
+      //   prompt,
+      //   ctx
+      // ).generate();
 
-      const feedbacks = undefinedOrValue(aiRes.feedbacks, null);
+      // const feedbacks = undefinedOrValue(aiRes.feedbacks, null);
 
-      if (feedbacks) {
-        await AiFeedback.insertMany(
-          feedbacks.map((e) => {
-            return {
-              feedback: e,
-              user_ID: ctx.flow.user._id,
-              seen: false,
-              material_ID: ctx.flow.answeredMaterial!._id,
-            };
-          })
-        );
-      }
+      // if (feedbacks) {
+      //   await AiFeedback.insertMany(
+      //     feedbacks.map((e) => {
+      //       return {
+      //         feedback: e,
+      //         user_ID: ctx.flow.user._id,
+      //         seen: false,
+      //         material_ID: ctx.flow.answeredMaterial!._id,
+      //       };
+      //     })
+      //   );
+      // }
 
-      await ctx.flow.updateAnsweredMaterial({
-        feedbackStatus: "COMPLETED",
-      });
+      // await ctx.flow.updateAnsweredMaterial({
+      //   feedbackStatus: "COMPLETED",
+      // });
 
       await ctx.complete();
     } catch (e) {

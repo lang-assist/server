@@ -124,6 +124,7 @@ export class JourneyHelper {
             speaking: -1,
             vocabulary: -1,
             writing: -1,
+            pronunciation: -1,
           },
           strongPoints: [],
           weakPoints: [],
@@ -146,6 +147,9 @@ export class JourneyHelper {
       return j;
     } catch (e) {
       log.error(e);
+      if (created) {
+        await Journey.findByIdAndDelete(created._id);
+      }
       throw ApiError.e500("Failed to create journey");
     }
   }

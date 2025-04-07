@@ -1,16 +1,14 @@
-<test_instructions type="QUIZ">
-The material type used for interactive quiz with questions.
-<output> 
-Only `questions` is required. `preludes` is optional.
-<field name="questions">
-Array of questions (`question_structure`). Additionally for QUIZ materials, each question can also refer to a prelude: `preludeID`. `preludeID` must be the `id` of an object in the `preludes` array. (Quiz Prelude Guidelines)
-</field>
-<field name="preludes">
-Optional pre-information. If multiple questions are grouped, this is used to indicate the context. It can also provide pre-information for a single question.
+<output>
+There are two types of jsonl: `prelude` and `question`. Each jsonl is a separate jsonl.
 
-Preludes provide context for quiz questions. They can be used to set up scenarios, provide background information, or create a context for multiple questions.
+question type jsonls are required, prelude type jsonls are optional. But if you reference a prelude in a question, you must give the prelude first.
 
-<field name="preludes.id">
+<jsonl type="prelude" priority="5" repeatable="true">
+Prelude provides context for quiz questions. They can be used to set up scenarios, provide background information, or create a context for multiple questions.
+
+payload object fields:
+
+<field name="id">
 Unique identifier. Must be unique within material. Format: 'prelude1', 'story1', 'context1'.
 
 <avoid>
@@ -19,25 +17,32 @@ Avoid using the same id for different preludes.
 
 </field>
 
-<field>
+<field name="parts">
 Array of content parts.
 
-<field name="preludes.parts.type">
+<field name="parts.type">
 Types of the prelude parts. Can be 'TEXT' for text, 'PICTURE' for picture, 'AUDIO' for audio.
 </field>
 
-<field name="preludes.parts.content">
+<field name="parts.content">
 Content of the prelude part. Content is required for all types and it is a string.
 
 For each type, content is formatted differently and has different rules:
 
-TEXT: Text. Text can be formatted with supported HTML tags. (`html_text_guidelines`)
+TEXT: Text. Text can be formatted with supported HTML tags. (<html_text_guidelines>)
 
-PICTURE: Picture prompt. Must be according to (`picture_prompt_guidelines`)
+PICTURE: Picture prompt. Must be according to (<picture_prompt_guidelines>)
 
-AUDIO: Text-to-speech content. Must be formatted following ssml guidelines (`ssml_guidelines`). You can use only provided voices and styles. DO NOT use any other voices or styles.
+AUDIO: Text-to-speech content. Must be formatted following ssml guidelines (<ssml_guidelines>). You can use only provided voices and styles. DO NOT use any other voices or styles.
 </field>
+
 </field>
-</field>
+
+</jsonl>
+
+<jsonl type="question" priority="5" repeatable="true">
+payload object have to ve accord with <question_structure>
+Additionally for QUIZ materials, each question can also refer to a prelude: `preludeID`. `preludeID` must be the `id` of an existing prelude you provided. (<prelude_guidelines>)
+</jsonl>
+
 </output>
-</test_instructions>

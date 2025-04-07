@@ -105,28 +105,29 @@ export class TermManager {
 
       ctx.startGeneration();
 
-      const gen = new ChatGeneration("linguisticUnits", builder, ctx);
+      // const gen = new ChatGeneration("linguisticUnits", builder, ctx);
 
-      const aiResult = await gen.generate();
+      // const aiResult = await gen.generate();
 
-      console.log(aiResult);
+      // console.log(aiResult);
 
-      const updated = await SentenceItem.findByIdAndUpdate(sentenceItem._id, {
-        $set: {
-          units: aiResult.result,
-          genStatus: "GENERATED",
-        },
-      });
+      // const updated = await SentenceItem.findByIdAndUpdate(sentenceItem._id, {
+      //   $set: {
+      //     units: aiResult.result,
+      //     genStatus: "GENERATED",
+      //   },
+      // });
 
-      if (!updated) {
-        throw new Error("Sentence item not updated");
-      }
+      // if (!updated) {
+      //   throw new Error("Sentence item not updated");
+      // }
 
-      ctx.sentenceItem = updated;
+      // ctx.sentenceItem = updated;
 
       await ctx.complete();
 
-      return updated;
+      // return updated;
+      throw new Error("Not implemented");
     } catch (e) {
       throw e;
     } finally {
@@ -182,18 +183,19 @@ export class TermManager {
       ctx.startGeneration();
       const gen = new ChatGeneration("linguisticUnits", builder, ctx);
 
-      const aiResult = await gen.generate();
+      // const aiResult = await gen.generate();
 
-      console.log(aiResult);
+      // console.log(aiResult);
 
-      await Terms.insertOne({
-        hash,
-        data: aiResult.result,
-      });
+      // await Terms.insertOne({
+      //   hash,
+      //   data: aiResult.result,
+      // });
 
-      await ctx.complete();
+      // await ctx.complete();
 
-      return aiResult.result;
+      // return aiResult.result;
+      throw new Error("Not implemented");
     } catch (e) {
       throw e;
     } finally {

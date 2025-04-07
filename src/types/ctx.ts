@@ -6,7 +6,7 @@
 // //   constructor(public context: C, public type: T) {}
 
 import { ObjectId } from "mongodb";
-import { BrocaTypes } from ".";
+import { JsonL } from ".";
 import { log } from "../helpers/log";
 import { GenCtx, IGenCtx } from "../models/_index";
 import { AIError, AIRateLimitError, MultipleAIError } from "../utils/ai-types";
@@ -18,11 +18,15 @@ type QueueItem<G extends Generation<any>> = {
   resolve: (value: any) => void;
   reject: (reason?: any) => void;
   gen: G;
-  promise: (gen: G) => Promise<{
+  promise: (
+    gen: G,
+    ...args: any[]
+  ) => Promise<{
     res?: any;
-    usage?: BrocaTypes.AI.Types.AIUsage;
+    usage?: JsonL.Types.AIUsage;
     error?: AIError;
   }>;
+  args: any[];
 };
 
 export class AIModelQueue<G extends Generation<any>> {
@@ -30,7 +34,7 @@ export class AIModelQueue<G extends Generation<any>> {
     public model: string,
     public maxTries: number,
     public concurrency: number,
-    public pricing: BrocaTypes.AI.Types.AIPricing,
+    public pricing: JsonL.Types.AIPricing,
     public extraChecks: ((
       res: any,
       resolve: (value: void) => void,
@@ -43,15 +47,19 @@ export class AIModelQueue<G extends Generation<any>> {
 
   public add(
     gen: G,
-    promise: (gen: G) => Promise<{
+    promise: (
+      gen: G,
+      ...args: any[]
+    ) => Promise<{
       res?: any;
-      usage?: BrocaTypes.AI.Types.AIUsage;
+      usage?: JsonL.Types.AIUsage;
       error?: AIError;
-    }>
+    }>,
+    ...args: any[]
   ) {
     return new Promise<{
       res?: any;
-      usage?: BrocaTypes.AI.Types.AIUsage;
+      usage?: JsonL.Types.AIUsage;
       error?: AIError;
     }>((resolve, reject) => {
       this.queue.push({
@@ -59,6 +67,7 @@ export class AIModelQueue<G extends Generation<any>> {
         promise,
         resolve,
         reject,
+        args,
       });
       this._run();
     });
@@ -162,7 +171,7 @@ export class AIModelQueue<G extends Generation<any>> {
       }
       this._setItRunning(item);
       item
-        .promise(item.gen)
+        .promise(item.gen, ...item.args)
         .then((res) => {
           if (res.usage) {
             item.gen.ctx.addUsage(
@@ -214,9 +223,9 @@ export abstract class Generation<R> {
     }
   ) {}
 
-  async generate(): Promise<R> {
+  async generate(...args: any[]): Promise<R> {
     try {
-      return await AIModel.generate(this);
+      return await AIModel.generate(this, ...args);
     } catch (e) {
       this.ctx.addError(e as Error);
       throw e;
@@ -242,7 +251,7 @@ type AllModels =
 export abstract class AIModel<G extends Generation<R>, R = any> {
   constructor(
     public genType: GenType,
-    public readonly _prices: BrocaTypes.AI.Types.AIPricing
+    public readonly _prices: JsonL.Types.AIPricing
   ) {}
 
   private static queue: {
@@ -293,7 +302,10 @@ export abstract class AIModel<G extends Generation<R>, R = any> {
     await Promise.all(Object.values(models).map((model) => model._init()));
   }
 
-  static async generate<G extends Generation<R>, R>(gen: G): Promise<R> {
+  static async generate<G extends Generation<R>, R>(
+    gen: G,
+    ...args: any[]
+  ): Promise<R> {
     let modelName;
 
     switch (gen.genType) {
@@ -318,12 +330,15 @@ export abstract class AIModel<G extends Generation<R>, R = any> {
     const queue = this.queue[modelName];
     const model = this.models[gen.genType][modelName];
 
-    const aiResponse = await queue.add(gen, model._generate.bind(model));
+    const aiResponse = await queue.add(gen, model._generate.bind(model), args);
 
     return aiResponse.res as R;
   }
 
-  abstract _generate(gen: G): Promise<BrocaTypes.AI.GenerationResponse<R>>;
+  abstract _generate(
+    gen: G,
+    ...args: any[]
+  ): Promise<JsonL.GenerationResponse<R>>;
 
   abstract readonly name: string;
 
@@ -421,9 +436,9 @@ export abstract class GenerationContext {
   }
 
   private _calculateCosts(
-    usage: BrocaTypes.AI.Types.AIUsage,
-    pricing: BrocaTypes.AI.Types.AIPricing
-  ): BrocaTypes.AI.Types.AIUsage {
+    usage: JsonL.Types.AIUsage,
+    pricing: JsonL.Types.AIPricing
+  ): JsonL.Types.AIUsage {
     const per = pricing.per;
     return {
       input: (usage.input / per) * pricing.input,
@@ -441,8 +456,8 @@ export abstract class GenerationContext {
 
   public get usageInfo(): {
     usages: {
-      usage: BrocaTypes.AI.Types.AIUsage;
-      costs: BrocaTypes.AI.Types.AIUsage;
+      usage: JsonL.Types.AIUsage;
+      costs: JsonL.Types.AIUsage;
       total: number;
       genType: GenType;
     }[];
@@ -452,8 +467,8 @@ export abstract class GenerationContext {
     total: number;
   } {
     const usages: {
-      usage: BrocaTypes.AI.Types.AIUsage;
-      costs: BrocaTypes.AI.Types.AIUsage;
+      usage: JsonL.Types.AIUsage;
+      costs: JsonL.Types.AIUsage;
       total: number;
       genType: GenType;
     }[] = [];
@@ -633,8 +648,8 @@ export abstract class GenerationContext {
   }
 
   private _usages: ({
-    usage: BrocaTypes.AI.Types.AIUsage;
-    pricing: BrocaTypes.AI.Types.AIPricing;
+    usage: JsonL.Types.AIUsage;
+    pricing: JsonL.Types.AIPricing;
     genType: GenType;
   } & {
     meta: {
@@ -645,8 +660,8 @@ export abstract class GenerationContext {
 
   public addUsage(
     genType: GenType,
-    usage: BrocaTypes.AI.Types.AIUsage,
-    pricing: BrocaTypes.AI.Types.AIPricing,
+    usage: JsonL.Types.AIUsage,
+    pricing: JsonL.Types.AIPricing,
     meta: {
       reason: string;
       [key: string]: any;

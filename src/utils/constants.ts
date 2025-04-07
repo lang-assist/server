@@ -191,8 +191,6 @@ export const VECTOR_STORE_DBS: {
 
 export const AIModels = {
   chat: {
-    gpt_4o_assistant: "gpt_4o_assistant",
-    gpt_4o_mini_assistant: "gpt_4o_mini_assistant",
     gpt_4o: "gpt_4o",
     o1: "o1",
     o1_mini: "o1_mini",
@@ -201,7 +199,6 @@ export const AIModels = {
     deepseek_chat: "deepseek_chat",
     deepseek_r1: "deepseek_r1",
     azure_gpt_4o: "azure_gpt_4o",
-    azure_gpt_4o_assistant: "azure_gpt_4o_assistant",
     azure_o1: "azure_o1",
     azure_o1_mini: "azure_o1_mini",
   },

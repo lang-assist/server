@@ -2,20 +2,16 @@ import { AzureOpenAI } from "openai";
 
 import { ObjectId } from "mongodb";
 import { Chatgpt_event, Prompts } from "../../../models/_index";
-import { ChatGeneration } from "./base";
-import { BrocaTypes } from "../../../types";
+import { ChatAIModel, ChatGeneration } from "./base";
+import { JsonL } from "../../../types";
 import { AIError } from "../../../utils/ai-types";
 import { AIModel } from "../../../types/ctx";
 import { PromptBuilder } from "../../../utils/prompter";
 
-type AIUsage = BrocaTypes.AI.Types.AIUsage;
+type AIUsage = JsonL.Types.AIUsage;
 
-export class AzureOpenAIModel extends AIModel<ChatGeneration<any>> {
-  _generate(
-    gen: ChatGeneration<any>
-  ): Promise<BrocaTypes.AI.GenerationResponse<any>> {
-    return this.runChat(gen.builder, gen.schema, gen.id);
-  }
+export class AzureOpenAIModel extends ChatAIModel {
+  
 
   maxTries: number = 1;
   concurrency: number = 10;
@@ -23,7 +19,7 @@ export class AzureOpenAIModel extends AIModel<ChatGeneration<any>> {
   constructor(
     public modelName: string,
     public apiKey: string,
-    price: BrocaTypes.AI.Types.AIPricing,
+    price: JsonL.Types.AIPricing,
     public baseUrl: string,
     public deployment: string,
     public apiVersion: string = "2024-08-01-preview"
@@ -52,79 +48,61 @@ export class AzureOpenAIModel extends AIModel<ChatGeneration<any>> {
     return Promise.resolve();
   }
 
-  async runChat(
-    builder: PromptBuilder,
-    schema: {
-      name: string;
-      schema: any;
-    },
-    genId: string
-  ): Promise<{ res: any; usage: AIUsage }> {
-    const prompt = builder.build();
-
-    Prompts.insertOne({
-      genId,
-      prompt,
-    });
-
-    const res = await this.client.chat.completions.create({
-      model: this.name,
-      messages: prompt,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          schema: schema.schema,
-          name: "response_schema",
-        },
-      },
-    });
-
-    if (res.choices.length === 0) {
-      throw new AIError("Failed to generate response", null, res);
-    }
-
-    if (res.choices[0].message.refusal) {
-      throw new AIError("Failed to generate response", null, res);
-    }
-
-    const content = res.choices[0].message.content;
-
-    if (!content) {
-      throw new AIError("Failed to generate response", null, res);
-    }
-
-    try {
-      const parsed = JSON.parse(content);
-
-      Chatgpt_event.insertOne({
-        data: { res },
+  async _generateStream(gen: ChatGeneration<any>, onDelta: (delta: string) => void): Promise<JsonL.GenerationResponse<boolean>> {
+      const prompt = gen.builder.build();
+  
+      await Prompts.insertOne({
+        genId: gen.id,
+        messages: prompt,
+        model: this.name,
       });
-
-      const usage = res.usage;
-
-      if (!usage) {
-        throw new AIError("Failed to get usage", null, res);
+  
+  
+      const stream = await this.client.chat.completions.create({
+        model: this.name,
+        messages: prompt,
+        stream: true,
+      });
+  
+  
+      for await (const part of stream) {
+  
+        if (part.choices && part.choices.length > 0) {
+          const c = part.choices[0];
+  
+          if (c.delta) {
+            onDelta(c.delta.content!);
+          }
+          // TODO: Error handle
+        }
+  
+        if (part.usage) {
+          return {
+            res: true,
+            usage: {
+              input: part.usage.prompt_tokens,
+              output: part.usage.completion_tokens,
+              cachedInput: part.usage.prompt_tokens_details?.cached_tokens || 0,
+              cacheWrite: 0
+            },
+            error: undefined,
+          };
+        }
+  
       }
-
+  
       return {
-        res: parsed,
+        res: true,
         usage: {
-          input: usage.prompt_tokens,
-          output: usage.completion_tokens,
-          cachedInput: usage.prompt_tokens_details?.cached_tokens || 0,
+          input: 0,
+          output: 0,
+          cachedInput: 0,
           cacheWrite: 0,
         },
+        error: undefined,
       };
-    } catch (e) {
-      Chatgpt_event.insertOne({
-        data: {
-          res,
-          error: e,
-        },
-      });
-      throw new AIError("Failed to parse response", null, e);
+  
     }
-  }
 
   /**
    * Example message includes like:

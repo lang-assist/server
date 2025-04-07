@@ -149,6 +149,11 @@ export abstract class MaterialBaseContext extends ChatGenerationContextWithGloba
 export class MaterialGenerationContext extends MaterialBaseContext {
   rawResponse: any | null = null;
 
+  preludes: BrocaTypes.Material.Quiz.QuizPrelude[] = [];
+  questions: BrocaTypes.Material.Quiz.QuizQuestion[] = [];
+  storyParts: BrocaTypes.Material.Story.StoryPart[] = [];
+  conversationDatas: any[] = [];
+
   toJSON() {
     return {
       ...super.toJSON(),
@@ -349,6 +354,9 @@ export class StageGeneratingContext extends MaterialBaseContext {
     });
   }
 
+  public stageMeta: BrocaTypes.Progress.Stage | null = null;
+  public stageParts: BrocaTypes.Progress.StagePart[] = [];
+
   /**
    *
    * Required Instructions:
@@ -431,6 +439,15 @@ export class AnalyzingContext extends MaterialBaseContext {
       type: "analyzer",
     });
   }
+
+  public newLevel: BrocaTypes.Progress.PathLevel | null = null;
+  public note: string | null = null;
+  public observations: {
+    general?: BrocaTypes.Progress.AIObservationEdit;
+    weaknesses?: BrocaTypes.Progress.AIObservationEdit;
+    strengths?: BrocaTypes.Progress.AIObservationEdit;
+  } = {};
+  public successRate: number | null = null;
 
   public async updateJourney(updates: {
     $set: {

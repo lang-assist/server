@@ -1,31 +1,92 @@
 import { Schema } from "jsonschema";
-import { BrocaTypes } from "../../../types";
+import { BrocaTypes, JsonL } from "../../../types";
 import { AIError } from "../../../utils/ai-types";
-import { Generation, GenerationContext, GenType } from "../../../types/ctx";
+import {
+  AIModel,
+  Generation,
+  GenerationContext,
+  GenType,
+} from "../../../types/ctx";
 import { PromptBuilder } from "../../../utils/prompter";
 import { GlobalAssistantManager } from "../../assistant";
 import { AIModels } from "../../../utils/constants";
+import { log } from "../../log";
+
+export abstract class ChatAIModel extends AIModel<ChatGeneration<any>> {
+  abstract _generateStream(
+    gen: ChatGeneration<any>,
+    onDelta: (delta: string) => void
+  ): Promise<JsonL.GenerationResponse<boolean>>;
+
+  async _generate(
+    gen: ChatGeneration<any>,
+    args: any[]
+  ): Promise<JsonL.GenerationResponse<boolean>> {
+    if (!args[0] || typeof args[0] !== "function") {
+      throw new Error("onMessage is required for chat generation");
+    }
+
+    const onMessage = args[0] as (message: JsonL.MessageJsonLs<any>) => void;
+
+    let processed = "";
+    let unprocessed = "";
+
+    const jsonlRegex = /^\s*{.*}\s*$/;
+
+    const res = await this._generateStream(gen, (d) => {
+      if (!d) {
+        return;
+      }
+
+      unprocessed += d;
+
+      const lines = unprocessed
+        .split("\n")
+        .map((e) => e.trim())
+        .filter((e) => {
+          return e.startsWith("{") && e.endsWith("}") && jsonlRegex.test(e);
+        });
+
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line);
+
+          if (parsed && parsed.type && parsed.payload) {
+            onMessage(parsed);
+            processed += `\n${line}`;
+            unprocessed = unprocessed.replace(line, "");
+          }
+        } catch (e) {
+          //console.error(e);
+        }
+      }
+    });
+
+    if (unprocessed.trim().length > 0) {
+      console.error("Unprocessed Message", unprocessed);
+    }
+
+    return res;
+  }
+}
 
 export abstract class ChatGenerationContext extends GenerationContext {
-  constructor(
-    public type: BrocaTypes.AI.Types.MsgGenerationType,
-    reason: string
-  ) {
+  constructor(public type: JsonL.MessageGenerationType, reason: string) {
     super("idle", reason);
   }
 
-  public rawResult: BrocaTypes.AI.GenResult<any> | null = null;
+  public rawResults: JsonL.MessageJsonLs<any>[] = [];
 
   public abstract get chatModel(): keyof typeof AIModels.chat;
 
   public abstract get threadId(): string | null;
 
-  public abstract get assistant(): BrocaTypes.AI.AIAssistant | null;
+  public abstract get assistant(): JsonL.AIAssistant | null;
 
   public abstract get language(): string;
 
   public abstract createAssistant(
-    assistantContext: BrocaTypes.AI.AIAssistant
+    assistantContext: JsonL.AIAssistant
   ): Promise<void>;
 
   public abstract createThread(threadId: string): Promise<void>;
@@ -34,7 +95,7 @@ export abstract class ChatGenerationContext extends GenerationContext {
 export abstract class ChatGenerationContextWithGlobalAssistant extends ChatGenerationContext {
   public toJSON(): any {
     return {
-      rawResult: this.rawResult,
+      rawResults: this.rawResults,
       assistant: this.assistant,
       reason: this.reason,
     };
@@ -44,12 +105,12 @@ export abstract class ChatGenerationContextWithGlobalAssistant extends ChatGener
     return null;
   }
 
-  public get assistant(): BrocaTypes.AI.AIAssistant | null {
+  public get assistant(): JsonL.AIAssistant | null {
     return GlobalAssistantManager.getAssistant(this.type, this.chatModel);
   }
 
   public async createAssistant(
-    assistantContext: BrocaTypes.AI.AIAssistant
+    assistantContext: JsonL.AIAssistant
   ): Promise<void> {
     await GlobalAssistantManager.createAssistant({
       assistantId: assistantContext.id,
@@ -66,8 +127,8 @@ export abstract class ChatGenerationContextWithGlobalAssistant extends ChatGener
 }
 
 export class ChatGeneration<
-  T extends BrocaTypes.AI.Types.MsgGenerationType
-> extends Generation<BrocaTypes.AI.GenResult<T>> {
+  T extends JsonL.MessageGenerationType
+> extends Generation<JsonL.GenerationResponse<boolean>> {
   constructor(
     public type: T,
     public builder: PromptBuilder,
@@ -94,7 +155,7 @@ export class ChatGeneration<
     };
   }
 
-  public totalUsage: BrocaTypes.AI.Types.AIUsage = {
+  public totalUsage: JsonL.Types.AIUsage = {
     input: 0,
     output: 0,
     cachedInput: 0,
@@ -103,7 +164,7 @@ export class ChatGeneration<
 
   public tries: number = 0;
 
-  public addUsage(usage: BrocaTypes.AI.Types.AIUsage) {
+  public addUsage(usage: JsonL.Types.AIUsage) {
     this.totalUsage.input += usage.input;
     this.totalUsage.output += usage.output;
     if (usage.cachedInput && this.totalUsage.cachedInput) {
@@ -120,10 +181,10 @@ export class ChatGeneration<
     this.errors.push(error);
   }
 
-  async generate(): Promise<BrocaTypes.AI.GenResult<T>> {
-    const g = await super.generate();
-
-    this.ctx.rawResult = g;
+  async generate(
+    onMessage: (message: JsonL.MessageJsonLs<T>) => void
+  ): Promise<JsonL.GenerationResponse<boolean>> {
+    const g = await super.generate(onMessage);
 
     return g;
   }

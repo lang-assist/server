@@ -5,11 +5,11 @@ import {
   GenerationContext,
   GenType,
 } from "../../../types/ctx";
-import { BrocaTypes } from "../../../types";
+import { BrocaTypes, JsonL } from "../../../types";
 import { StorageService } from "../../storage";
 import { AudioHelper } from "../../audio_helper";
 
-export class SpeechGeneration extends Generation<BrocaTypes.AI.MediaGenerationType> {
+export class SpeechGeneration extends Generation<JsonL.MediaGenerationType> {
   constructor(
     public text: string,
     public fileId: ObjectId,
@@ -39,7 +39,7 @@ export class SpeechGeneration extends Generation<BrocaTypes.AI.MediaGenerationTy
         return AudioHelper.getGen(id)!;
       }
 
-      const gen = new Promise<BrocaTypes.AI.MediaGenerationType>(
+      const gen = new Promise<JsonL.MediaGenerationType>(
         async (resolve, reject) => {
           try {
             const res = await super.generate();
@@ -67,7 +67,7 @@ export class SpeechGeneration extends Generation<BrocaTypes.AI.MediaGenerationTy
   }
 }
 
-export class TranscriptionGeneration extends Generation<BrocaTypes.AI.TranscriptionGenerationType> {
+export class TranscriptionGeneration extends Generation<JsonL.TranscriptionGenerationType> {
   constructor(
     public audio: Buffer,
     ctx: GenerationContext,

@@ -1,11 +1,15 @@
 <doc_referencing>
 Other AI agents creates documentations according to this reference. For pointing to the correct documentation, you need to specify the `title` and `search` term.
 
+Documentation references are JSON objects with the following fields:
+
 <field name="title">
+Both, <user-facing> and <llm-facing>.
 A brief, user-facing description of the documentation topic.
 </field>
 
 <field name="search_term">
+Only <llm-facing>.
 A non-user-facing term used to search for relevant documentation in the vector database.
 </field>
 

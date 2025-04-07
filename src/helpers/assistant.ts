@@ -1,11 +1,11 @@
 import { Meta } from "../models/_index";
-import { BrocaTypes } from "../types";
+import { BrocaTypes, JsonL } from "../types";
 
 export class GlobalAssistantManager {
   // @ts-ignore
   private static assistants: {
     [key in BrocaTypes.AI.Types.MsgGenerationType]: {
-      [key: string]: BrocaTypes.AI.AIAssistant;
+      [key: string]: JsonL.AIAssistant;
     };
   } = {};
 
@@ -47,7 +47,7 @@ export class GlobalAssistantManager {
     model: string
     // instructionVersion: number,
     // schemaVersion: number
-  ): BrocaTypes.AI.AIAssistant | null {
+  ): JsonL.AIAssistant | null {
     if (this.assistants[type] && this.assistants[type][model]) {
       // if (
       //   this.assistants[type][model].version === instructionVersion &&
